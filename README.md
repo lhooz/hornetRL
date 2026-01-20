@@ -1,5 +1,3 @@
----
-
 # HornetRL: Bio-Inspired Flapping Flight Control
 
 **HornetRL** is a JAX-based simulation and control framework for flapping-wing micro-aerial vehicles (FWMAVs). It combines high-frequency unsteady aerodynamics (via a surrogate model), a Central Pattern Generator (CPG) based muscle model, and an IDA-PBC neural controller to achieve stable hovering flight.
