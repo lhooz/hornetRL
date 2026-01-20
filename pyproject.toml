@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hornetRL"
 version = "0.1.0"
-description = "JAX-based flapping fly simulation and control"
+description = "JAX-based control framework for robophysical hornet models"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
