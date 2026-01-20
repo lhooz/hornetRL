@@ -1,10 +1,12 @@
 # HornetRL: Bio-Inspired Flapping Flight Control
 
-**HornetRL** is a JAX-based simulation and control framework for **robophysical hornet models**. It focuses on the flight dynamics of biomimetic robotic insects utilizing:
+**HornetRL** is a JAX-based simulation and control framework for **robophysical hornet models**. It combines differentiable physics with modern reinforcement learning to achieve stable flight for biomimetic robotic insects.
 
-* **High-frequency unsteady aerodynamics** (via a surrogate model)
-* A **Central Pattern Generator (CPG)** based muscle model
-* An **IDA-PBC neural controller** for stable hovering flight
+Key features include:
+* **Short-Horizon Actor-Critic (SHAC):** Efficient reinforcement learning utilizing differentiable simulation gradients.
+* **High-Fidelity Physics:** High-frequency unsteady aerodynamics via a differentiable surrogate model.
+* **Bio-Inspired Actuation:** A Central Pattern Generator (CPG) based muscle model.
+* **Structured Control:** A Neural IDA-PBC policy architecture that guarantees physical consistency.
 
 ## 📂 Project Structure
 

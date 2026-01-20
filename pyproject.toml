@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hornetRL"
 version = "0.1.0"
-description = "JAX-based control framework for robophysical hornet models"
+description = "JAX-based RL framework for robophysical hornets using SHAC and Neural IDA-PBC"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
