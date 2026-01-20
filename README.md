@@ -19,10 +19,10 @@ Run the full training demo in your browser with zero setup:
 hornetRL_repo/                <-- Repository Root
 ├── hornetRL/                 <-- Main Package
 │   ├── environment_surrogate.py  # JAX surrogate for unsteady aerodynamics
-│   ├── fly_system.py             # Rigid body dynamics & kinematics
+│   ├── fly_system.py             # Rigid body dynamics
 │   ├── neural_cpg.py             # Oscillator & Muscle mapping
 │   ├── neural_idapbc.py          # Neural IDA-PBC Policy
-│   ├── train.py                  # Training loop (PPO/SHAC)
+│   ├── train.py                  # Training loop (SHAC)
 │   ├── inference_hornet.py       # Visualization & Inference
 │   └── fluid.pkl                 # Pre-trained fluid dynamics data
 ├── notebooks/                <-- Demo Notebooks
