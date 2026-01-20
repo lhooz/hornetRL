@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hornetRL"
+version = "0.1.0"
+description = "JAX-based flapping fly simulation and control"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "HaoLi", email = "haoli26@buaa.edu.cn" },
+]
+# Critical: List your dependencies here
+dependencies = [
+    "jax",
+    "jaxlib",
+    "dm-haiku",    # Note: 'haiku' is installed via 'dm-haiku'
+    "numpy",
+    "matplotlib",
+    "optax"
+]
+
+# This ensures the fluid.pkl file is included
+[tool.setuptools.package-data]
+hornetRL = ["*.pkl"]
