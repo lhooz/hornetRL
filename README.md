@@ -8,17 +8,27 @@ Key features include:
 * **Bio-Inspired Actuation:** A Central Pattern Generator (CPG) based muscle model.
 * **Structured Control:** A Neural IDA-PBC policy architecture that guarantees physical consistency.
 
+### 🎓 Try it now
+Run the full training demo in your browser with zero setup:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lhooz/hornetRL/blob/main/notebooks/demo_train.ipynb)
+
 ## 📂 Project Structure
 
 ```text
-hornetRL/               <-- Main Package
-├── environment_surrogate.py  # JAX surrogate for unsteady aerodynamics
-├── fly_system.py             # Rigid body dynamics & kinematics
-├── neural_cpg.py             # Oscillator & Muscle mapping
-├── neural_idapbc.py          # Neural IDA-PBC Policy
-├── train.py                  # Training loop (PPO/SHAC)
-├── inference_hornet.py       # Visualization & Inference
-└── fluid.pkl                 # Pre-trained fluid dynamics data
+hornetRL_repo/                <-- Repository Root
+├── hornetRL/                 <-- Main Package
+│   ├── environment_surrogate.py  # JAX surrogate for unsteady aerodynamics
+│   ├── fly_system.py             # Rigid body dynamics & kinematics
+│   ├── neural_cpg.py             # Oscillator & Muscle mapping
+│   ├── neural_idapbc.py          # Neural IDA-PBC Policy
+│   ├── train.py                  # Training loop (PPO/SHAC)
+│   ├── inference_hornet.py       # Visualization & Inference
+│   └── fluid.pkl                 # Pre-trained fluid dynamics data
+├── notebooks/                <-- Demo Notebooks
+│   └── demo_train.ipynb          # Colab-ready training script
+├── pyproject.toml
+└── README.md
 
 ```
 
@@ -31,7 +41,7 @@ hornetRL/               <-- Main Package
 Clone the repository and install it in editable mode:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/hornetRL.git
+git clone [https://github.com/lhooz/hornetRL.git](https://github.com/lhooz/hornetRL.git)
 cd hornetRL
 pip install -e .
 
@@ -42,7 +52,7 @@ pip install -e .
 You can install directly from GitHub inside a Colab notebook:
 
 ```python
-!pip install git+https://github.com/YOUR_USERNAME/hornetRL.git
+!pip install git+[https://github.com/lhooz/hornetRL.git](https://github.com/lhooz/hornetRL.git)
 
 ```
 
