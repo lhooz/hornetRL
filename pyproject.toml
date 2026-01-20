@@ -11,16 +11,20 @@ requires-python = ">=3.10"
 authors = [
   { name = "HaoLi", email = "haoli26@buaa.edu.cn" },
 ]
-# Critical: List your dependencies here
+
 dependencies = [
     "jax",
-    "jaxlib",
-    "dm-haiku",    # Note: 'haiku' is installed via 'dm-haiku'
+    "dm-haiku",
     "numpy",
     "matplotlib",
     "optax"
 ]
 
-# This ensures the fluid.pkl file is included
+# 1. TELL SETUPTOOLS WHERE TO FIND THE CODE (Crucial!)
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hornetRL*"]
+
+# 2. INCLUDE DATA FILES (Like fluid.pkl)
 [tool.setuptools.package-data]
 hornetRL = ["*.pkl"]
