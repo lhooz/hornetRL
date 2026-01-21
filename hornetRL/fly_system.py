@@ -130,7 +130,7 @@ class FlyRobotPhysics:
         hinge_x, hinge_z = x + off_x, z + off_z
         
         # Calculate Stroke Plane orientation
-        global_st_ang = theta + self.robot.stroke_plane_angle
+        global_st_ang = theta + self.stroke_plane_angle
         c_st, s_st = jnp.cos(global_st_ang), jnp.sin(global_st_ang)
         c_dev, s_dev = -s_st, c_st 
         
