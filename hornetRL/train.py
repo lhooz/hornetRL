@@ -552,7 +552,7 @@ def train():
     
     if checkpoints:
         # Sort by step number extracted from filename
-        checkpoints.sort(key=lambda f: int(re.sub('r\D', '', f)))
+        checkpoints.sort(key=lambda f: int(re.sub(r'\D', '', f)))
         
         last_ckpt = checkpoints[-1]
         print(f"--> Resuming from {last_ckpt}")
