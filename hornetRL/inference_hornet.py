@@ -231,11 +231,6 @@ def run_simulation(params):
     Calculates control actions, steps the environment, and collects downsampled
     data for visualization.
     """
-    
-
-[Image of feedback control loop diagram]
-
-
     print("--> Initializing Inference Environment...")
     env = InferenceFlyEnv()
     rng = jax.random.PRNGKey(0)
@@ -336,8 +331,8 @@ def generate_gif(data, env):
     # --- Graphics Objects ---
     traj_line, = ax.plot([], [], color='#555555', linestyle='--', linewidth=1.0, alpha=0.5)
 
-    # Wing Center Trajectory (Cyan Dotted Line)
-    wing_traj_line, = ax.plot([], [], color='cyan', linestyle=':', linewidth=0.5, alpha=0.6, label='Wing Path')
+    # Wing Center Trajectory (Subtle Grey Trace)
+    wing_traj_line, = ax.plot([], [], color='black', linestyle='-', linewidth=0.8, alpha=0.15, label='Wing Path')
     
     patch_thorax = patches.Ellipse((0,0), width=0.012, height=0.006, facecolor='#2c3e50', edgecolor='k', zorder=10)
     patch_head = patches.Circle((0,0), radius=0.0025, facecolor='#e74c3c', edgecolor='k', zorder=10)
