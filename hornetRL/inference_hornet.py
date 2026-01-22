@@ -69,9 +69,9 @@ class Config:
     PERTURB_TIME = 0.10  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.1, -0.05]) 
+    PERTURB_FORCE = jnp.array([0.2, -0.1]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.0002
+    PERTURB_TORQUE = -0.0004
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -343,8 +343,8 @@ def generate_gif(data, env):
     # --- Graphics Objects ---
     traj_line, = ax.plot([], [], color='#555555', linestyle='--', linewidth=1.0, alpha=0.5)
 
-    # Wing Center Trajectory (Subtle Grey Trace)
-    wing_traj_line, = ax.plot([], [], color='black', linestyle='-', linewidth=0.8, alpha=0.15, label='Wing Path')
+    # Wing Center Trajectory (Purple Trace)
+    wing_traj_line, = ax.plot([], [], color='purple', linestyle='-', linewidth=0.8, alpha=0.3, label='Wing Path')
     
     patch_thorax = patches.Ellipse((0,0), width=0.012, height=0.006, facecolor='#2c3e50', edgecolor='k', zorder=10)
     patch_head = patches.Circle((0,0), radius=0.0025, facecolor='#e74c3c', edgecolor='k', zorder=10)
