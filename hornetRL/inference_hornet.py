@@ -279,13 +279,10 @@ def run_simulation(params):
         
         # --- 2. Run JIT-compiled step ---
         state, stacked_frames = single_inference_step(state, params, ext_f, ext_t)
-
-        # --- 3. Step Physics ---
-        state, stacked_frames = env.step(state, mods, external_force=ext_f, external_torque=ext_t)
         
         s_r, s_w, s_f, s_le, s_hinge = stacked_frames
         
-        # --- 4. Global Skip Logic (Visualization Downsampling) ---
+        # --- 3. Global Skip Logic (Visualization Downsampling) ---
         # Determines which frames to keep based on the global simulation time.
         # This prevents the list from growing too large (OOM protection).
         
