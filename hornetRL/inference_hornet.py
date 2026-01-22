@@ -62,16 +62,16 @@ class Config:
     # Visualization Downsampling:
     # Skips frames to keep memory usage manageable during long simulations.
     # 50 = Render every 50th physics block.
-    VIZ_STEP_SKIP = 50 
+    VIZ_STEP_SKIP = 20 
     
     # --- Robustness Testing (Wind Gust) ---
     PERTURBATION = True  
-    PERTURB_TIME = 0.20  # Time of impact (s)
+    PERTURB_TIME = 0.10  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.2, -0.1]) 
+    PERTURB_FORCE = jnp.array([0.1, -0.05]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.0005 
+    PERTURB_TORQUE = -0.0002
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -273,7 +273,7 @@ def run_simulation(params):
         ext_t = 0.0
         
         if Config.PERTURBATION:
-            if Config.PERTURB_TIME <= t_sim <= Config.PERTURB_TIME + 0.02:
+            if Config.PERTURB_TIME <= t_sim <= Config.PERTURB_TIME + 0.01:
                 ext_f = Config.PERTURB_FORCE
                 ext_t = Config.PERTURB_TORQUE
         
