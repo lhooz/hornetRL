@@ -1,6 +1,9 @@
 # --- User Specific Folders ---
 checkpoints_shac/
 
+# --- Output / Artifacts ---
+*.gif
+
 # --- OS / Mac Junk Files ---
 .DS_Store
 
