@@ -119,8 +119,8 @@ class BiologicalKinematicMap(hk.Module):
         dev_amp_target = jnp.clip(raw[..., 4] * 0.006, -0.006, 0.006)
         
         # 6. Abdomen Torque
-        # Scaled to be biologically realistic (~1.4x Gravity).
-        abd_torque = raw[..., 5] * 5e-5
+        # Scaled to be biologically realistic (~2.2x Gravity).
+        abd_torque = raw[..., 5] * 8e-5
         
         # 7. Angle of Attack (Downstroke)
         aoa_down = jnp.clip(0.8 + raw[..., 6] * 0.8, 0.0, 1.6)
