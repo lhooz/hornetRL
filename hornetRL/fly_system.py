@@ -10,7 +10,7 @@ class FlyRobotPhysics:
     This class handles:
     1. Mass and inertia properties for the thorax and abdomen.
     2. Joint constraints (hinges, limits, and passive stiffness).
-    3. Hamiltonian formulation for equations of motion.
+    3. Port-Hamiltonian formulation (J-R formalism) for energy-based control.
     """
     def __init__(self):
         # --- Dimensions (meters) ---

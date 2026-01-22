@@ -242,21 +242,33 @@ def run_simulation(params):
     vis_data = {'r': [], 'w': [], 'f': [], 't': [], 'p_force': [], 'p_torque': [], 'le': [], 'hinge': []}
     
     print(f"--> Simulating {Config.DURATION}s ({total_control_steps} control steps)...")
+
+    # Compile the ENTIRE step (Brain + Physics) into a single optimized function.
+    # This prevents JAX from re-compiling or leaking memory traces in the loop.
+    @jax.jit
+    def single_inference_step(curr_state, curr_params, ext_f, ext_t):
+        r_state = curr_state[0]
+        
+        # 1. Prepare Observation
+        wrapped_theta = jnp.mod(r_state[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
+        obs_input = r_state.at[:, 2].set(wrapped_theta) / Config.OBS_SCALE
+        
+        # 2. Run Policy
+        mods, _, _ = ac_model.apply(curr_params, obs_input)
+        
+        # 3. Run Environment
+        next_state, frames = env.step(curr_state, mods, external_force=ext_f, external_torque=ext_t)
+        return next_state, frames
     
     t_sim = 0.0
     
-    for i in range(total_control_steps):
-        r_state = state[0]
+    # Warmup compilation (Critical to prevent lag on first frame)
+    print("--> Compiling JAX graph (this takes a few seconds)...")
+    _ = single_inference_step(state, params, jnp.zeros(2), 0.0)
+    print("--> Compilation Complete!")
 
-        # --- 1. Policy Inference ---
-        # Wrap theta and normalize observation
-        wrapped_theta = jnp.mod(r_state[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
-        obs_input = r_state.at[:, 2].set(wrapped_theta)
-        obs_input = obs_input / Config.OBS_SCALE
-        
-        mods, _, _ = ac_model.apply(params, obs_input)
-        
-        # --- 2. Determine Perturbation ---
+    for i in range(total_control_steps):
+        # --- 1. Determine Perturbation ---
         ext_f = jnp.zeros(2)
         ext_t = 0.0
         
@@ -265,6 +277,9 @@ def run_simulation(params):
                 ext_f = Config.PERTURB_FORCE
                 ext_t = Config.PERTURB_TORQUE
         
+        # --- 2. Run JIT-compiled step ---
+        state, stacked_frames = single_inference_step(state, params, ext_f, ext_t)
+
         # --- 3. Step Physics ---
         state, stacked_frames = env.step(state, mods, external_force=ext_f, external_torque=ext_t)
         
