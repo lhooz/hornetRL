@@ -69,9 +69,9 @@ class Config:
     PERTURB_TIME = 0.10  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.3, -0.5]) 
+    PERTURB_FORCE = jnp.array([0.3, -0.4]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.0006
+    PERTURB_TORQUE = -0.001
 
 # ==============================================================================
 # 2. MODEL DEFINITION
