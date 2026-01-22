@@ -55,23 +55,23 @@ class Config:
     SIM_SUBSTEPS = 20    # Physics integration steps per single Control step
     
     # --- Inference Settings ---
-    DURATION = 0.8       # Total simulation time (seconds)
+    DURATION = 1.0       # Total simulation time (seconds)
     FPS = 60             # Output GIF frame rate
     DPI = 150            # Output resolution
     
     # Visualization Downsampling:
     # Skips frames to keep memory usage manageable during long simulations.
     # 50 = Render every 50th physics block.
-    VIZ_STEP_SKIP = 30 
+    VIZ_STEP_SKIP = 35 
     
     # --- Robustness Testing (Wind Gust) ---
     PERTURBATION = True  
     PERTURB_TIME = 0.10  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.3, -0.2]) 
+    PERTURB_FORCE = jnp.array([0.3, -0.5]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.0005
+    PERTURB_TORQUE = -0.0006
 
 # ==============================================================================
 # 2. MODEL DEFINITION
