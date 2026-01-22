@@ -2,10 +2,10 @@ import os
 import time
 
 # Force CPU execution to prevent OOM errors during high-resolution plotting
-# os.environ["JAX_PLATFORMS"] = "cpu"
+os.environ["JAX_PLATFORMS"] = "cpu"
 
 import jax
-# jax.config.update("jax_platform_name", "cpu")
+jax.config.update("jax_platform_name", "cpu")
 
 import jax.numpy as jnp
 import haiku as hk
