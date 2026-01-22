@@ -62,7 +62,7 @@ class Config:
     # Visualization Downsampling:
     # Skips frames to keep memory usage manageable during long simulations.
     # 50 = Render every 50th physics block.
-    VIZ_STEP_SKIP = 20 
+    VIZ_STEP_SKIP = 30 
     
     # --- Robustness Testing (Wind Gust) ---
     PERTURBATION = True  
