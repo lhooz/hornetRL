@@ -76,7 +76,7 @@ class Config:
     CKPT_DIR = "checkpoints_shac"
     VIS_DIR = "checkpoints_shac"
     AUX_LOSS_WEIGHT = 100.0   
-    VIS_INTERVAL = 500      
+    VIS_INTERVAL = 200      
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
 
@@ -400,6 +400,30 @@ def run_visualization(env, params, update_idx):
     
     current_step_counter = 0
     
+    # JIT-COMPILED STEP FUNCTION
+    # Compile Brain + Physics into one kernel to prevent OOM and speed up rendering.
+    @jax.jit
+    def vis_step(curr_state, curr_params, step_idx):
+        r_st = curr_state[0]
+        
+        # 1. Prepare Observation
+        wrapped_th = jnp.mod(r_st[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
+        obs_v = r_st.at[:, 2].set(wrapped_th)
+        scaled_obs = obs_v / Config.OBS_SCALE
+        
+        # 2. Policy Inference
+        mods, _, _ = ac_model.apply(curr_params, scaled_obs)
+        
+        # 3. Environment Step
+        next_state, _, f_nodal, w_pose, h_marker = env.step_batch(curr_state, mods, step_idx=step_idx)
+        
+        return next_state, f_nodal, w_pose, h_marker
+
+    # Warmup JIT (Critical to prevent lag/crash on first frame)
+    print("--> Compiling Visualization JIT...")
+    _ = vis_step(state, params, 0)
+    print("--> Compilation Complete!")
+
     for i in range(total_visual_frames):
         # --- Visualization Loop ---
         for _ in range(steps_per_frame):
@@ -410,18 +434,9 @@ def run_visualization(env, params, update_idx):
             if np.isnan(r_cpu).any():
                 print(f"!!! Visualization stopped early due to NaN !!!")
                 break
-
-            # Angle Wrapping for observation consistency
-            wrapped_th = jnp.mod(r_st[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
-            obs_v = r_st.at[:, 2].set(wrapped_th)
-            
-            scaled_obs = obs_v / Config.OBS_SCALE
-            
-            # Policy Inference
-            mods, _, _ = ac_model.apply(params, scaled_obs)
             
             # Environment Step
-            state, _, f_nodal, w_pose, h_marker = env.step_batch(state, mods, step_idx=current_step_counter)
+            state, f_nodal, w_pose, h_marker = vis_step(state, params, current_step_counter)
             current_step_counter += 1
 
         # Record Frame Data
