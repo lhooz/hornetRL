@@ -55,7 +55,7 @@ class Config:
     SIM_SUBSTEPS = 20    # Physics integration steps per single Control step
     
     # --- Inference Settings ---
-    DURATION = 0.5       # Total simulation time (seconds)
+    DURATION = 0.8       # Total simulation time (seconds)
     FPS = 60             # Output GIF frame rate
     DPI = 150            # Output resolution
     
@@ -69,9 +69,9 @@ class Config:
     PERTURB_TIME = 0.10  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.2, -0.1]) 
+    PERTURB_FORCE = jnp.array([0.3, -0.2]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.0004
+    PERTURB_TORQUE = -0.0005
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -344,7 +344,7 @@ def generate_gif(data, env):
     traj_line, = ax.plot([], [], color='#555555', linestyle='--', linewidth=1.0, alpha=0.5)
 
     # Wing Center Trajectory (Purple Trace)
-    wing_traj_line, = ax.plot([], [], color='purple', linestyle='-', linewidth=0.8, alpha=0.3, label='Wing Path')
+    wing_traj_line, = ax.plot([], [], color='purple', linestyle='-', linewidth=0.8, alpha=0.5, label='Wing Path')
     
     patch_thorax = patches.Ellipse((0,0), width=0.012, height=0.006, facecolor='#2c3e50', edgecolor='k', zorder=10)
     patch_head = patches.Circle((0,0), radius=0.0025, facecolor='#e74c3c', edgecolor='k', zorder=10)
