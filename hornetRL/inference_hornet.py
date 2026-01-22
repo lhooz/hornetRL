@@ -335,6 +335,27 @@ def generate_gif(data, env):
     le_markers = data['le']
     hinge_markers = data['hinge']
     
+    # --- PRE-CALCULATION: Body-Relative Wing History ---
+    # Convert global wing coordinates to local body coordinates.
+    wing_rel_history = []
+    
+    for i in range(len(r_states)):
+        r, w = r_states[i], w_poses[i]
+        
+        # 1. Vector from Body Center to Wing Center (Global)
+        dx_global = w[0] - r[0]
+        dz_global = w[1] - r[1]
+        
+        # 2. Rotate into Body Frame (Remove Body Rotation)
+        c, s = np.cos(-r[2]), np.sin(-r[2])
+        x_local = dx_global * c - dz_global * s
+        z_local = dx_global * s + dz_global * c
+        
+        wing_rel_history.append([x_local, z_local])
+        
+    wing_rel_history = np.array(wing_rel_history)
+    # ---------------------------------------------------------------
+
     fig, ax = plt.subplots(figsize=(10, 8), dpi=Config.DPI)
     ax.set_aspect('equal')
     ax.set_facecolor('#f0f0f5')
@@ -442,9 +463,27 @@ def generate_gif(data, env):
         # --- Update Trajectory (Wing Center) ---
         wing_hist_len = 22
         start_w = max(0, idx - wing_hist_len)
-        wing_hist_x = [w[0] for w in w_poses[start_w:idx]]
-        wing_hist_z = [w[1] for w in w_poses[start_w:idx]]
-        wing_traj_line.set_data(wing_hist_x, wing_hist_z)
+
+        # 1. Get the chunk of relative history
+        rel_chunk = wing_rel_history[start_w:idx]
+        
+        if len(rel_chunk) > 0:
+            # 2. Transform it to the CURRENT body pose
+            # Rot(theta) * local + Pos
+            curr_c, curr_s = np.cos(r_th), np.sin(r_th)
+            
+            # Rotation
+            traj_x = rel_chunk[:, 0] * curr_c - rel_chunk[:, 1] * curr_s
+            traj_z = rel_chunk[:, 0] * curr_s + rel_chunk[:, 1] * curr_c
+            
+            # Translation
+            traj_x += rx
+            traj_z += rz
+            
+            wing_traj_line.set_data(traj_x, traj_z)
+        else:
+            wing_traj_line.set_data([], [])
+        # ---------------------------------------------------
         
         # --- Visualize Kick (Perturbation) ---
         is_force = flag_force[idx]
