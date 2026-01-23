@@ -39,7 +39,7 @@ class FlyEnv:
             Uses a mixed initialization curriculum (80% Nominal Hover, 20% Chaotic Perturbation)
             to robustify the policy against disturbances.
         """
-        k1, k2, k3, k4 = jax.random.split(key, 4)
+        k1, k2, k3, k4, k_shuffle = jax.random.split(key, 5)
         
         # =========================================================
         # 1. INIT ROBOT STATE (Curriculum Strategy)
@@ -82,11 +82,19 @@ class FlyEnv:
         q_ang_chaos = jnp.concatenate([theta_chaos, phi_chaos], axis=-1)
         
         # --- C. Combine & Velocity ---
-        q_pos = jnp.concatenate([q_pos_nom, q_pos_chaos], axis=0)
-        q_ang = jnp.concatenate([q_ang_nom, q_ang_chaos], axis=0)
+        # This creates the ordered list [Easy, ..., Easy, Hard, ..., Hard]
+        q_pos_ordered = jnp.concatenate([q_pos_nom, q_pos_chaos], axis=0)
+        q_ang_ordered = jnp.concatenate([q_ang_nom, q_ang_chaos], axis=0)
+        v_ordered     = jnp.zeros((batch_size, 4))
         
-        # Velocity: Initialize at zero
-        v = jnp.zeros((batch_size, 4))
+        # --- CRITICAL FIX: SHUFFLE THE BATCH ---
+        # This ensures the "Chaos" condition rotates randomly among agents
+        perm = jax.random.permutation(k_shuffle, batch_size)
+        
+        q_pos = q_pos_ordered[perm]
+        q_ang = q_ang_ordered[perm]
+        v     = v_ordered[perm] # (Though v is all zeros, good practice to keep aligned)
+        # ---------------------------------------
         
         # State Vector: [Batch, 8]
         robot_state_v = jnp.concatenate([q_pos, q_ang, v], axis=1)
@@ -208,17 +216,17 @@ class FlyEnv:
             
         fluid_state = jax.vmap(init_fluid_fn)(wing_pose_centered)
 
-        return (robot_state_v, fluid_state, osc_state, phys_params)
+        return (robot_state_v, fluid_state, osc_state, active_props)
 
     def step_batch(self, full_state, action_mods, step_idx=100):
         """
         Advances the simulation by one control step (Config.SIM_SUBSTEPS physics steps).
         Includes warmup ramping and velocity clamping for numerical stability.
         """
-        robot_st, fluid_st, osc_st, phys_p = full_state
+        robot_st, fluid_st, osc_st, active_props = full_state
         
         # Define single agent step function for vmap/scan
-        def single_agent_step(r, f, o, p, a):
+        def single_agent_step(r, f, o, props, a):
             
             # --- Sub-stepping Loop (Physics Integration) ---
             def sub_step_fn(carry, _):
@@ -232,7 +240,7 @@ class FlyEnv:
 
                 # 2. Physics Update (Rigid Body + Fluid)
                 (r_next_v, f_next), f_wing, f_nodal, wing_pose, hinge_marker = self.phys.step(
-                    self.phys.fluid.params, (curr_r, curr_f), action_data, p, 0.0, self.cfg.DT
+                    self.phys.fluid.params, (curr_r, curr_f), action_data, props, 0.0, self.cfg.DT
                 )
                 
                 # --- Warmup Ramp & Stability ---
@@ -282,9 +290,9 @@ class FlyEnv:
         single_agent_step_remat = jax.checkpoint(single_agent_step)
 
         # Vectorize over batch
-        r_n, f_n, o_n, f_act, f_nodal_b, w_pose_b, h_marker_b = jax.vmap(single_agent_step_remat)(robot_st, fluid_st, osc_st, phys_p, action_mods)
+        r_n, f_n, o_n, f_act, f_nodal_b, w_pose_b, h_marker_b = jax.vmap(single_agent_step_remat)(robot_st, fluid_st, osc_st, , active_props, action_mods)
         
-        return (r_n, f_n, o_n, phys_p), f_act, f_nodal_b, w_pose_b, h_marker_b
+        return (r_n, f_n, o_n, active_props), f_act, f_nodal_b, w_pose_b, h_marker_b
 
     def get_reward_metrics(self, robot_state, u_forces, reward_weights):
         """
@@ -322,14 +330,14 @@ class FlyEnv:
                 w_eff * loss_eff)
         
         # 3. Soft Fence Constraint
-        dist_from_center = jnp.sqrt(loss_pos)
+        dist_from_center = loss_pos
         out_of_bounds_cost = jnp.where(dist_from_center > 0.20, 100.0, 0.0)
         cost = cost + out_of_bounds_cost 
 
         # 4. Proximity Bonuses
-        is_close = loss_pos < 0.002 # ~4.5cm
+        is_close = loss_pos < 0.05 # ~5cm
         bonus = is_close * 5.0
-        is_close2 = loss_pos < 0.0004 # ~2cm
+        is_close2 = loss_pos < 0.02 # ~2cm
         bonus2 = is_close2 * 25.0
 
         # 5. Survival Bonus

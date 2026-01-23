@@ -39,27 +39,13 @@ class Config:
     
     # Target State: [x, z, theta, phi, vx, vz, w_theta, w_phi]
     # Goal: Stationary hover at specific altitude with upright posture.
-    TARGET_STATE = jnp.array([0.0, 0.0, 0.8, 0.3, 0.0, 0.0, 0.0, 0.0])
+    TARGET_STATE = jnp.array([0.0, 0.0, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0])
 
     # --- Arena Boundaries ---
     # Absolute displacement limit (meters) before episode termination.
     # 0.45m corresponds to a 90cm total workspace width.
     ARENA_W = 0.45 
 
-    # --- Observation Scaling ---
-    # Normalization constants to map raw physics states to Neural Network friendly ranges [-1, 1].
-    # Indices: [x, z, theta, phi, vx, vz, w_theta, w_phi]
-    OBS_SCALE = jnp.array([
-        0.45,   # x: Arena boundary
-        0.45,   # z: Arena boundary
-        3.14,   # theta: Full rotation normalization
-        1.50,   # phi: Abdomen joint limit
-        5.00,   # vx: Max expected flight velocity
-        5.00,   # vz: Max expected flight velocity
-        50.0,   # w_theta: High-frequency body oscillation scale
-        50.0    # w_phi: High-frequency abdomen oscillation scale
-    ])
-    
     # --- Time Scales ---
     DT = 3e-5               # Physics integration timestep (s)
     SIM_SUBSTEPS = 20       # Physics steps per Control Step
@@ -80,12 +66,35 @@ class Config:
     # Set to 1.0 for easier initial training, 0.8 for robustness
     CURRICULUM_RATIO = 0.8
     
+    # --- PBT Hyperparameters ---
+    # Initial Reward Weights: [Pos, Th_Ang, Ab_Ang, Lin_Vel, Ang_Vel, Eff]
+    # These act as the "center" of the search distribution.
+    PBT_BASE_WEIGHTS = jnp.array([10000.0, 10.0, 5.0, 0.1, 0.00001, 0.1])
+    
+    # Evolution Dynamics
+    PBT_PERTURB_FACTOR = 1.2       # Mutation strength (+/- 20%)
+    PBT_TRUNCATE_FRACTION = 0.2    # Kill bottom 20%
+
     CKPT_DIR = "checkpoints_shac"
     VIS_DIR = "checkpoints_shac"
     AUX_LOSS_WEIGHT = 100.0   
     VIS_INTERVAL = 200      
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
+
+    # --- Observation Scaling ---
+    # Normalization constants to map raw physics states to Neural Network friendly ranges [-1, 1].
+    # Indices: [x, z, theta, phi, vx, vz, w_theta, w_phi]
+    OBS_SCALE = jnp.array([
+        0.45,   # x: Arena boundary
+        0.45,   # z: Arena boundary
+        3.14,   # theta: Full rotation normalization
+        1.50,   # phi: Abdomen joint limit
+        5.00,   # vx: Max expected flight velocity
+        5.00,   # vz: Max expected flight velocity
+        50.0,   # w_theta: High-frequency body oscillation scale
+        50.0    # w_phi: High-frequency abdomen oscillation scale
+    ])
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -136,17 +145,14 @@ def run_visualization(env, params, update_idx):
     state = env.reset(rng, 1) 
     
     # Extract parameters for the specific fly being visualized (Index 0)
-    # state structure is (robot, fluid, osc, phys_params)
-    phys_params_batch = state[3] 
+    active_props_batch = state[3] 
     
-    # Take the 0-th element of the batch for every parameter
-    p_0 = jax.tree.map(lambda x: x[0], phys_params_batch)
+    # Take the 0-th element of the batch
+    # This IS the real geometry. No need to call compute_props again.
+    real_props = jax.tree.map(lambda x: x[0], active_props_batch)
     
     # Extract the 0-th Brain from the population to visualize
     params_single = jax.tree.map(lambda x: x[0], params)
-
-    # Compute the ACTUAL geometry (d1, d2) used by physics
-    real_props = env.phys.robot.compute_props(p_0)
 
     current_step_counter = 0
     
@@ -331,7 +337,7 @@ def train():
             print("    -> PBT State loaded.")
         else:
             # Fallback for old checkpoints
-            pbt_state = init_pbt_state(rng, Config.BATCH_SIZE)
+            pbt_state = init_pbt_state(rng, Config.BATCH_SIZE, Config.PBT_BASE_WEIGHTS)
             print("    -> WARNING: No PBT state found. Resetting PBT curriculum.")
 
         match = re.search(r"params_(\d+)", last_ckpt)
@@ -364,7 +370,7 @@ def train():
         opt_state = optimizer.init(params)
         
         # Start PBT from scratch
-        pbt_state = init_pbt_state(rng, Config.BATCH_SIZE)
+        pbt_state = init_pbt_state(rng, Config.BATCH_SIZE, Config.PBT_BASE_WEIGHTS)
 
     # --- SCENARIO C: FRESH START (Random Init) ---
     else:
@@ -381,7 +387,7 @@ def train():
             optax.adam(Config.LR_ACTOR)
         )
         opt_state = optimizer.init(params)
-        pbt_state = init_pbt_state(rng, Config.BATCH_SIZE)
+        pbt_state = init_pbt_state(rng, Config.BATCH_SIZE, Config.PBT_BASE_WEIGHTS)
 
     print(f"--> Initialization Complete. Params Batch Shape: {params['linear']['w'].shape}")
 
@@ -391,12 +397,23 @@ def train():
         Includes policy gradient, value function loss, and auxiliary force matching loss.
         """
         # Generate temporal keys for noise injection
+        # 1. Rollout Index: 0..H (Used for Gradient Masking)
+        rollout_indices = jnp.arange(Config.HORIZON)
+        
+        # 2. Physics Index: H..2H (Used for Physics Dynamics)
+        # By adding a large offset (WARMUP_STEPS + 1), we ensure the physics engine 
+        # always sees a value > WARMUP_STEPS, preventing it from triggering the 
+        # "Velocity Pinning" or "Force Ramping" logic during continuous flight.
+        phys_indices = rollout_indices + Config.WARMUP_STEPS + 5
+        
         scan_keys = jax.random.split(key, Config.HORIZON)
-        scan_inputs = (jnp.arange(Config.HORIZON), scan_keys)
+        
+        # Pass BOTH indices to the scan
+        scan_inputs = (rollout_indices, phys_indices, scan_keys)
 
         def scan_fn(carry, xs): 
             curr_full = carry
-            step_idx, step_key = xs 
+            r_idx, p_idx, step_key = xs
             
             curr_robot = curr_full[0]
             # 1. Wrap Theta (Index 2) to [-pi, pi]
@@ -420,12 +437,11 @@ def train():
             mods, u_brain, _ = batched_network(params, noisy_obs)
             
             # 4. Environment Step (Physics uses raw actions)
-            next_full, f_actual, _, _, _ = env.step_batch(curr_full, mods, step_idx=step_idx)
+            next_full, f_actual, _, _, _ = env.step_batch(curr_full, mods, step_idx=p_idx)
             
             # 5. Reward Calculation
             rew_scaled, met = env.get_reward_metrics(curr_robot, u_brain, pbt_weights)
             
-            # Auxiliary Loss: Match ICNN forces to Physics forces
             force_err = jnp.mean((u_brain[:, :3] - f_actual[:, :3])**2)
             loss_t = -rew_scaled + (Config.AUX_LOSS_WEIGHT * force_err)
             
@@ -435,7 +451,6 @@ def train():
                 met['ang_th'], met['ang_ab'], 
                 met['vel_lin'], met['vel_ang']
             )
-
             return next_full, step_metrics
 
         final_full, step_results = jax.lax.scan(
@@ -447,7 +462,7 @@ def train():
          m_ang_th, m_ang_ab, m_vel_lin, m_vel_ang) = step_results
 
         # Mask losses during Warmup
-        warmup_mask = jnp.arange(Config.HORIZON) >= Config.WARMUP_STEPS
+        warmup_mask = rollout_indices >= Config.WARMUP_STEPS
         losses = jnp.where(warmup_mask[:, None], losses, 0.0)
 
         # 1. Discounted Loss (Actor)
@@ -600,7 +615,12 @@ def train():
         
             # Run the logic from the standalone script
             params, opt_state, pbt_state = pbt_evolve(
-                k_pbt, params, opt_state, pbt_state
+                k_pbt, 
+                params, 
+                opt_state, 
+                pbt_state,
+                perturb_factor=Config.PBT_PERTURB_FACTOR,
+                truncate_fraction=Config.PBT_TRUNCATE_FRACTION
             )
         
             # Print best weights

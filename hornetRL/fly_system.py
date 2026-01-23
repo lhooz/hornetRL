@@ -75,7 +75,7 @@ class FlyRobotPhysics:
         # Passive stiffness (tendon) and equilibrium angle
         self.k_hinge = 5e-5    
         self.b_hinge = 5e-6      
-        self.phi_equilibrium = 0.3 
+        self.phi_equilibrium = 0.2
 
         # --- Joint Limits (Asymmetric) ---
         # Positive Phi = Curling DOWN (Stinging) -> Large Range (~80 deg)
@@ -291,7 +291,7 @@ class FlappingFlySystem:
         )
         self.robot = FlyRobotPhysics()
         
-    def step(self, params, full_state, action_data, phys_params, t, dt):
+    def step(self, params, full_state, action_data, active_props, t, dt):
         """
         Differentiable Step Function.
         Advances both the robot dynamics and the fluid environment.
@@ -299,9 +299,6 @@ class FlappingFlySystem:
         robot_state_v, fluid_state = full_state
 
        # --- 1. RESOLVE PHYSICS (Delegate to Robot Class) ---
-        # Converts "Noise" into "Physics"
-        active_props = self.robot.compute_props(phys_params)
-        
         # Unpack Action Data (Includes stroke bias for steering)
         wing_angles, wing_rates, abd_torque, stroke_bias = action_data
         

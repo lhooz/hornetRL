@@ -160,7 +160,7 @@ def policy_network_icnn(x, target_state=None, obs_scale=None):
     """
     # Default hover target if none provided
     if target_state is None:
-        target_state = jnp.array([0.0, 0.0, 1.08, 0.3, 0.0, 0.0, 0.0, 0.0])
+        target_state = jnp.array([0.0, 0.0, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0])
     
     # 1. THE BRAIN (Compute Generalized Forces)
     brain = NeuralIDAPBC_ICNN(target_state, obs_scale)

@@ -18,16 +18,13 @@ class PBTHyperparams(NamedTuple):
     # Shape: (BATCH_SIZE,)
     running_reward: jnp.ndarray 
 
-def init_pbt_state(key: jax.Array, batch_size: int) -> PBTHyperparams:
+def init_pbt_state(key: jax.Array, batch_size: int, base_weights: jnp.ndarray) -> PBTHyperparams:
     """
     Initializes the PBT state with log-uniform noise around baseline defaults.
     """
-    # Baseline weights (Your original hardcoded Config values)
-    # [Pos, Th_Ang, Ab_Ang, Lin_Vel, Ang_Vel, Eff]
-    baselines = jnp.array([10000.0, 10.0, 5.0, 0.1, 0.00001, 0.1])
     
     # Tile to match batch size: (Batch, 6)
-    weights = jnp.tile(baselines, (batch_size, 1))
+    weights = jnp.tile(base_weights, (batch_size, 1))
     
     # Add initial diversity (+/- 20%)
     # We use log-uniform noise so we don't accidentally make weights negative
