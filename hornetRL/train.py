@@ -571,7 +571,11 @@ def train():
         wrapped_theta = jnp.mod(sample_robot[2] + jnp.pi, 2 * jnp.pi) - jnp.pi
         obs_sample = sample_robot.at[2].set(wrapped_theta)
         scaled_sample = obs_sample / Config.OBS_SCALE
-        sample_mods, _, _ = ac_model.apply(params, scaled_sample)
+
+        params_sample = jax.tree.map(lambda x: x[0], params)
+        
+        # Now apply single brain to single observation
+        sample_mods, _, _ = ac_model.apply(params_sample, scaled_sample)
 
         angles, _, _, _ = get_wing_kinematics(sample_osc, unpack_action(sample_mods))
         str_angle, dev_angle, pit_angle = angles
