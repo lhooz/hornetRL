@@ -297,7 +297,7 @@ def train():
     os.makedirs(Config.CKPT_DIR, exist_ok=True)
     os.makedirs(Config.VIS_DIR, exist_ok=True)
     
-    env = FlyEnv()
+    env = FlyEnv(Config)
     rng = jax.random.PRNGKey(Config.SEED)
     
     dummy_input = jnp.zeros((1, 8))
