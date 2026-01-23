@@ -17,7 +17,7 @@ import matplotlib.animation as animation
 
 # --- USER MODULES ---
 from .environment_surrogate import JaxSurrogateEngine
-from .fly_system import FlappingFlySystem
+from .fly_system import FlappingFlySystem, PhysParams
 from .neural_cpg import OscillatorState, step_oscillator, get_wing_kinematics
 from .neural_idapbc import policy_network_icnn, unpack_action
 
@@ -130,25 +130,44 @@ class InferenceFlyEnv:
         osc_state = OscillatorState.init(base_freq=Config.BASE_FREQ)
         osc_state = jax.tree.map(lambda x: jnp.stack([x]*batch_size), osc_state)
 
-        # 3. Calculate Centered Wing Pose for Fluid Surrogate
+       # 3. Define NOMINAL Physics Parameters (No Randomization for Inference)
+        # We use scale=1.0 and offset=0.0 to test the "Ideal" Hornet.
+        # Can modify this later to stress-test the policy against heavy/light hornets
+        
+        phys_params = PhysParams(
+            thorax_mass_scale=jnp.array([1.0]),
+            abd_mass_scale=jnp.array([1.0]),
+            thorax_offset_x=jnp.array([0.0]),
+            abd_offset_x=jnp.array([0.0]),
+            hinge_x_noise=jnp.array([0.0]),
+            hinge_z_noise=jnp.array([0.0]),
+            stroke_ang_noise=jnp.array([0.0]),
+            k_hinge_scale=jnp.array([1.0]),
+            b_hinge_scale=jnp.array([1.0]),
+            phi_equil_offset=jnp.array([0.0])
+        )
+
+        # 4. Calculate Centered Wing Pose for Fluid Surrogate
         # The surrogate expects the wing pivot to be at (0,0) in its local frame.
+        active_props = jax.vmap(self.phys.robot.compute_props)(phys_params)
+
         zero_action = jnp.zeros((batch_size, 9)) 
         ret = jax.vmap(get_wing_kinematics)(osc_state, unpack_action(zero_action))
         k_angles, k_rates = ret[0], ret[1]
         
         robot_state_dummy = jnp.concatenate([robot_state_v[:, :4], jnp.zeros((batch_size, 4))], axis=1)
-        wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics)(robot_state_dummy, k_angles, k_rates)
+        wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics)(robot_state_dummy, k_angles, k_rates, active_props)
         
         # --- Center Pose Logic ---
         def get_centered_pose(r_state, w_pose_glob, bias_val):
             q, theta = r_state[:4], r_state[2]
-            h_x, h_z = self.phys.robot.hinge_offset_x, self.phys.robot.hinge_offset_z
+            h_x, h_z = props.hinge_offset_x, props.hinge_offset_z
             c_th, s_th = jnp.cos(theta), jnp.sin(theta)
             
             hinge_glob_x = h_x * c_th - h_z * s_th
             hinge_glob_z = h_x * s_th + h_z * c_th
             
-            total_st_ang = theta + self.phys.robot.stroke_plane_angle
+            total_st_ang = theta + props.stroke_plane_angle
             c_st, s_st = jnp.cos(total_st_ang), jnp.sin(total_st_ang)
             bias_glob_x, bias_glob_z = bias_val * c_st, bias_val * s_st
             
@@ -159,24 +178,25 @@ class InferenceFlyEnv:
             p_y = w_pose_glob[1] - (q[1] + off_z)
             return jnp.array([p_x, p_y, w_pose_glob[2]])
 
-        wing_pose_centered = jax.vmap(get_centered_pose)(robot_state_v, wing_pose_global, osc_state.bias)
+        wing_pose_centered = jax.vmap(get_centered_pose)(robot_state_v, wing_pose_global, osc_state.bias, active_props)
         
         def init_fluid_fn(wp): return self.phys.fluid.init_state(wp[0], wp[1], wp[2])
         fluid_state = jax.vmap(init_fluid_fn)(wing_pose_centered)
 
-        return (robot_state_v, fluid_state, osc_state)
+        return (robot_state_v, fluid_state, osc_state, phys_params)
 
     def step(self, full_state, action_mods, external_force=jnp.zeros(2), external_torque=0.0):
         """
         Advances the simulation, applying actions and optional external disturbances.
         """
-        robot_st, fluid_st, osc_st = full_state
+        robot_st, fluid_st, osc_st, phys_p = full_state
         
         # Unpack Batch (Simulate single agent)
         r = robot_st[0]
         f = jax.tree.map(lambda x: x[0], fluid_st) 
         o = jax.tree.map(lambda x: x[0], osc_st)
         a = action_mods[0]
+        p_single = jax.tree.map(lambda x: x[0], phys_p)
 
         def sub_step_fn(carry, _):
             curr_r, curr_f, curr_o = carry
@@ -188,17 +208,18 @@ class InferenceFlyEnv:
 
             # 2. Update Physics
             (r_next_v, f_next), _, f_nodal, wing_pose, hinge_marker = self.phys.step(
-                self.phys.fluid.params, (curr_r, curr_f), action_data, 0.0, Config.DT
+                self.phys.fluid.params, (curr_r, curr_f), action_data, p_single, 0.0, Config.DT
             )
             
             # --- Apply Perturbations (Wind Gust) ---
             # F = ma  ->  a = F/m
-            total_mass = self.phys.robot.m_thorax + self.phys.robot.m_abdomen
+            total_mass = (self.phys.robot.m_thorax * p_single.thorax_mass_scale + 
+                          self.phys.robot.m_abdomen * p_single.abd_mass_scale)
             accel_lin = external_force / total_mass
             r_next_v = r_next_v.at[4:6].add(accel_lin * Config.DT)
             
             # Tau = Ia -> alpha = Tau/I
-            inertia = self.phys.robot.I_thorax
+            inertia = self.phys.robot.I_thorax * p_single.thorax_mass_scale
             accel_ang = external_torque / inertia
             r_next_v = r_next_v.at[6].add(accel_ang * Config.DT)
             
@@ -219,7 +240,7 @@ class InferenceFlyEnv:
         o_b = jax.tree.map(lambda x: jnp.expand_dims(x, 0), final_o)
         f_b = jax.tree.map(lambda x: jnp.expand_dims(x, 0), final_f)
         
-        return (r_b, f_b, o_b), stacked_viz_frames
+        return (r_b, f_b, o_b, phys_p), stacked_viz_frames
 
 # ==============================================================================
 # 4. MAIN SIMULATION LOOP

@@ -18,7 +18,7 @@ from typing import NamedTuple
 
 # --- USER MODULES ---
 from .environment_surrogate import JaxSurrogateEngine
-from .fly_system import FlappingFlySystem
+from .fly_system import FlappingFlySystem, PhysParams
 from .neural_cpg import OscillatorState, step_oscillator, get_wing_kinematics
 from .neural_idapbc import policy_network_icnn, unpack_action
 
@@ -134,7 +134,7 @@ class FlyEnv:
             Uses a mixed initialization curriculum (80% Nominal Hover, 20% Chaotic Perturbation)
             to robustify the policy against disturbances.
         """
-        k1, k2, k3 = jax.random.split(key, 3)
+        k1, k2, k3, k4 = jax.random.split(key, 4)
         
         # =========================================================
         # 1. INIT ROBOT STATE (Curriculum Strategy)
@@ -204,25 +204,79 @@ class FlyEnv:
         k_rates  = ret[1]
         
         robot_state_p_dummy = jnp.concatenate([robot_state_v[:, :4], jnp.zeros((batch_size, 4))], axis=1)
-        wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics)(robot_state_p_dummy, k_angles, k_rates)
+
+        # =========================================================
+        # 4. DOMAIN RANDOMIZATION (Physics Parameters)
+        # =========================================================
+        # Split keys for different physical properties
+        k_mass, k_com, k_hinge, k_st, k_joint = jax.random.split(k3, 5)
+        
+        # A. Mass & Inertia Scaling (+/- 20%)
+        # We vary thorax and abdomen independently to prevent the agent from
+        # memorizing a specific mass ratio.
+        mass_scale_th = jax.random.uniform(k_mass, (batch_size,), minval=0.80, maxval=1.20)
+        mass_scale_ab = jax.random.uniform(k_mass, (batch_size,), minval=0.80, maxval=1.20)
+
+        # B. Center of Mass Shifts (Body Geometry)
+        # Shift CoM forward/back by +/- 2mm. This drastically changes the
+        # pitch stability and forces active control.
+        off_x_th = jax.random.uniform(k_com, (batch_size,), minval=-0.002, maxval=0.002)
+        off_x_ab = jax.random.uniform(k_com, (batch_size,), minval=-0.002, maxval=0.002)
+
+        # C. Hinge Location Noise (Manufacturing tolerance)
+        # Shift hinge point by +/- 1mm
+        h_x_noise = jax.random.uniform(k_hinge, (batch_size,), minval=-0.001, maxval=0.001)
+        h_z_noise = jax.random.uniform(k_hinge, (batch_size,), minval=-0.001, maxval=0.001)
+
+        # D. Stroke Plane Angle Noise
+        # Tilt stroke plane by +/- 5 degrees (~0.08 rad)
+        st_ang_noise = jax.random.uniform(k_st, (batch_size,), minval=-0.08, maxval=0.08)
+
+        # E. Joint Stiffness/Damping (Tendon properties)
+        # Variance in tissue elasticity (+/- 50%)
+        k_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
+        b_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
+        
+        # Equilibrium Angle Noise (+/- 10 degrees)
+        # Simulates different "resting" postures for the abdomen
+        phi_eq_off = jax.random.uniform(k_joint, (batch_size,), minval=-0.17, maxval=0.17)
+
+        # Pack into PhysParams NamedTuple (Vectorized)
+        phys_params = PhysParams(
+            thorax_mass_scale=mass_scale_th,
+            abd_mass_scale=mass_scale_ab,
+            thorax_offset_x=off_x_th,
+            abd_offset_x=off_x_ab,
+            hinge_x_noise=h_x_noise,
+            hinge_z_noise=h_z_noise,
+            stroke_ang_noise=st_ang_noise,
+            k_hinge_scale=k_hinge_scale,
+            b_hinge_scale=b_hinge_scale,
+            phi_equil_offset=phi_eq_off
+        )
+
+        # We need to map compute_props over the batch of params
+        active_props = jax.vmap(self.phys.robot.compute_props)(phys_params)
+
+        wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics)(robot_state_p_dummy, k_angles, k_rates, active_props)
         
         # --- Center Pose Transformation ---
         # The surrogate model inference assumes the wing is at (0,0).
         # We subtract (Body Pos + Hinge Offset + Bias Offset) to move to the local inference frame.
         
-        def get_centered_pose(r_state, w_pose_glob, bias_val):
+        def get_centered_pose(r_state, w_pose_glob, bias_val, props):
             q = r_state[:4]
             theta = q[2]
             
             # A. Global Hinge Offset (Rotated by Body)
-            h_x = self.phys.robot.hinge_offset_x
-            h_z = self.phys.robot.hinge_offset_z
+            h_x = props.hinge_offset_x
+            h_z = props.hinge_offset_z
             c_th, s_th = jnp.cos(theta), jnp.sin(theta)
             hinge_glob_x = h_x * c_th - h_z * s_th
             hinge_glob_z = h_x * s_th + h_z * c_th
             
             # B. Global Bias Offset (Rotated by Stroke Plane)
-            total_st_ang = theta + self.phys.robot.stroke_plane_angle
+            total_st_ang = theta + props.stroke_plane_angle
             c_st, s_st = jnp.cos(total_st_ang), jnp.sin(total_st_ang)
             bias_glob_x = bias_val * c_st
             bias_glob_z = bias_val * s_st
@@ -237,27 +291,27 @@ class FlyEnv:
             
             return jnp.array([p_x, p_y, w_pose_glob[2]])
 
-        wing_pose_centered = jax.vmap(get_centered_pose)(robot_state_v, wing_pose_global, osc_state.bias)
+        wing_pose_centered = jax.vmap(get_centered_pose)(robot_state_v, wing_pose_global, osc_state.bias, active_props)
 
         # =========================================================
-        # 4. INIT FLUID STATE
+        # 5. INIT FLUID STATE
         # =========================================================
         def init_fluid_fn(wp):
             return self.phys.fluid.init_state(wp[0], wp[1], wp[2])
             
         fluid_state = jax.vmap(init_fluid_fn)(wing_pose_centered)
 
-        return (robot_state_v, fluid_state, osc_state)
+        return (robot_state_v, fluid_state, osc_state, phys_params)
 
     def step_batch(self, full_state, action_mods, step_idx=100):
         """
         Advances the simulation by one control step (Config.SIM_SUBSTEPS physics steps).
         Includes warmup ramping and velocity clamping for numerical stability.
         """
-        robot_st, fluid_st, osc_st = full_state
+        robot_st, fluid_st, osc_st, phys_p = full_state
         
         # Define single agent step function for vmap/scan
-        def single_agent_step(r, f, o, a):
+        def single_agent_step(r, f, o, p, a):
             
             # --- Sub-stepping Loop (Physics Integration) ---
             def sub_step_fn(carry, _):
@@ -271,7 +325,7 @@ class FlyEnv:
 
                 # 2. Physics Update (Rigid Body + Fluid)
                 (r_next_v, f_next), f_wing, f_nodal, wing_pose, hinge_marker = self.phys.step(
-                    self.phys.fluid.params, (curr_r, curr_f), action_data, 0.0, Config.DT
+                    self.phys.fluid.params, (curr_r, curr_f), action_data, p, 0.0, Config.DT
                 )
                 
                 # --- Warmup Ramp & Stability ---
@@ -321,9 +375,9 @@ class FlyEnv:
         single_agent_step_remat = jax.checkpoint(single_agent_step)
 
         # Vectorize over batch
-        r_n, f_n, o_n, f_act, f_nodal_b, w_pose_b, h_marker_b = jax.vmap(single_agent_step_remat)(robot_st, fluid_st, osc_st, action_mods)
+        r_n, f_n, o_n, f_act, f_nodal_b, w_pose_b, h_marker_b = jax.vmap(single_agent_step_remat)(robot_st, fluid_st, osc_st, phys_p, action_mods)
         
-        return (r_n, f_n, o_n), f_act, f_nodal_b, w_pose_b, h_marker_b
+        return (r_n, f_n, o_n, phys_p), f_act, f_nodal_b, w_pose_b, h_marker_b
 
     def get_reward_metrics(self, robot_state, u_forces):
         """
@@ -390,14 +444,25 @@ def run_visualization(env, params, update_idx):
     Generates a GIF visualization of the flight trajectory and aerodynamic forces.
     """
     print(f"--> Generatng Visualization for Step {update_idx}...")
+
+    steps_per_frame = 1
+    total_visual_frames = Config.HORIZON * 4
+
     sim_data = {'states': [], 'wing_pose': [], 'nodal_forces': [], 'le_marker': [], 'hinge_marker': [], 't': []}
     
     rng = jax.random.PRNGKey(update_idx)
     state = env.reset(rng, 1) 
     
-    steps_per_frame = 1
-    total_visual_frames = Config.HORIZON * 4
+    # Extract parameters for the specific fly being visualized (Index 0)
+    # state structure is (robot, fluid, osc, phys_params)
+    phys_params_batch = state[3] 
     
+    # Take the 0-th element of the batch for every parameter
+    p_0 = jax.tree.map(lambda x: x[0], phys_params_batch)
+    
+    # Compute the ACTUAL geometry (d1, d2) used by physics
+    real_props = env.phys.robot.compute_props(p_0)
+
     current_step_counter = 0
     
     # JIT-COMPILED STEP FUNCTION
@@ -493,19 +558,20 @@ def run_visualization(env, params, update_idx):
         ax.set_xlim(-0.3, 0.3)
         ax.set_ylim(-0.3, 0.3)
         
+        d1 = real_props.d1
+        d2 = real_props.d2
+
         # 1. Update Thorax
         patch_thorax.set_center((rx, rz))
         patch_thorax.set_angle(np.degrees(r_th))
         
         # 2. Update Head
-        d1 = env.phys.robot.d1
         patch_head.set_center((rx + d1 * np.cos(r_th), rz + d1 * np.sin(r_th)))
         
         # 3. Update Abdomen (Kinematic Chain)
         joint_x = rx - d1 * np.cos(r_th)
         joint_z = rz - d1 * np.sin(r_th)
         
-        d2 = env.phys.robot.d2
         abd_ang = r_th + r_phi
         patch_abd.set_center((joint_x - d2 * np.cos(abd_ang), joint_z - d2 * np.sin(abd_ang)))
         patch_abd.set_angle(np.degrees(abd_ang))

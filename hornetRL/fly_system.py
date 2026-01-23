@@ -2,6 +2,34 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from .environment_surrogate import JaxSurrogateEngine
+from typing import NamedTuple
+
+# --- Define the Data Structures ---
+class PhysParams(NamedTuple):
+    thorax_mass_scale: float
+    abd_mass_scale: float
+    thorax_offset_x: float
+    abd_offset_x: float
+    hinge_x_noise: float
+    hinge_z_noise: float
+    stroke_ang_noise: float
+    k_hinge_scale: float
+    b_hinge_scale: float
+    phi_equil_offset: float
+
+class RobotProps(NamedTuple):
+    m_thorax: float
+    m_abdomen: float
+    I_thorax: float
+    I_abdomen: float
+    d1: float
+    d2: float
+    hinge_offset_x: float
+    hinge_offset_z: float
+    stroke_plane_angle: float
+    k_hinge: float
+    b_hinge: float
+    phi_equilibrium: float
 
 class FlyRobotPhysics:
     """
@@ -62,11 +90,31 @@ class FlyRobotPhysics:
         # Wall Damping: Dissipates energy on impact to prevent bouncing
         self.b_wall = 5e-4
 
-    def get_mass_matrix(self, q):
+    def compute_props(self, p: PhysParams) -> RobotProps:
+        """
+        Takes the randomization factors (p) and returns the 
+        actual physics properties for this specific fly.
+        """
+        return RobotProps(
+            m_thorax=self.m_thorax * p.thorax_mass_scale,
+            m_abdomen=self.m_abdomen * p.abd_mass_scale,
+            I_thorax=self.I_thorax * p.thorax_mass_scale,
+            I_abdomen=self.I_abdomen * p.abd_mass_scale,
+            d1=self.d1 + p.thorax_offset_x,
+            d2=self.d2 + p.abd_offset_x,
+            hinge_offset_x=self.hinge_offset_x + p.hinge_x_noise,
+            hinge_offset_z=self.hinge_offset_z + p.hinge_z_noise,
+            stroke_plane_angle=self.stroke_plane_angle + p.stroke_ang_noise,
+            k_hinge=self.k_hinge * p.k_hinge_scale,
+            b_hinge=self.b_hinge * p.b_hinge_scale,
+            phi_equilibrium=self.phi_equilibrium + p.phi_equil_offset
+        )
+
+    def get_mass_matrix(self, q, props: RobotProps):
         """Computes the mass matrix M(q) for the coupled 2-body system."""
-        m1, m2 = self.m_thorax, self.m_abdomen
-        I1, I2 = self.I_thorax, self.I_abdomen
-        l1, l2 = self.d1, self.d2
+        m1, m2 = props.m_thorax, props.m_abdomen
+        I1, I2 = props.I_thorax, props.I_abdomen
+        l1, l2 = props.d1, props.d2
         th, ph = q[2], q[3]
         
         c_th, s_th = jnp.cos(th), jnp.sin(th)
@@ -91,7 +139,7 @@ class FlyRobotPhysics:
         
         return jnp.stack([row0, row1, row2, row3])
 
-    def get_kinematics(self, state, wing_angles, wing_rates):
+    def get_kinematics(self, state, wing_angles, wing_rates, props: RobotProps):
         """
         Calculates Global Wing Pose and Velocity based on CPG Inputs.
         
@@ -108,7 +156,7 @@ class FlyRobotPhysics:
         p = state[4:]  
         
         x, z, theta, phi = q
-        M = self.get_mass_matrix(q)
+        M = self.get_mass_matrix(q, props)
         v = jnp.linalg.solve(M, p)
         vx, vz, w_theta, w_phi = v
         
@@ -125,12 +173,12 @@ class FlyRobotPhysics:
         c_th, s_th = jnp.cos(theta), jnp.sin(theta)
         
         # Transform Hinge Offset to Global Frame
-        off_x = self.hinge_offset_x * c_th - self.hinge_offset_z * s_th
-        off_z = self.hinge_offset_x * s_th + self.hinge_offset_z * c_th
+        off_x = props.hinge_offset_x * c_th - props.hinge_offset_z * s_th
+        off_z = props.hinge_offset_x * s_th + props.hinge_offset_z * c_th
         hinge_x, hinge_z = x + off_x, z + off_z
         
         # Calculate Stroke Plane orientation
-        global_st_ang = theta + self.stroke_plane_angle
+        global_st_ang = theta + props.stroke_plane_angle
         c_st, s_st = jnp.cos(global_st_ang), jnp.sin(global_st_ang)
         c_dev, s_dev = -s_st, c_st 
         
@@ -164,15 +212,15 @@ class FlyRobotPhysics:
         
         return wing_pose, wing_vel
 
-    def potential_energy(self, q):
+    def potential_energy(self, q, props: RobotProps):
         """Calculates Potential Energy (Gravity + Springs + Joint Limits)."""
         x, z, th, ph = q
-        pe1 = self.m_thorax * self.g * z
-        az = z - self.d1 * jnp.sin(th) - self.d2 * jnp.sin(th + ph)
-        pe2 = self.m_abdomen * self.g * az
+        pe1 = props.m_thorax * self.g * z
+        az = z - props.d1 * jnp.sin(th) - props.d2 * jnp.sin(th + ph)
+        pe2 = props.m_abdomen * self.g * az
         
         # Passive Spring Energy: E = 1/2 * k * (phi - rest)^2
-        pe_spring = 0.5 * self.k_hinge * (ph - self.phi_equilibrium)**2
+        pe_spring = 0.5 * props.k_hinge * (ph - props.phi_equilibrium)**2
 
         # --- Wall Constraints (Soft Limits) ---
         # 1. Violation Down (Stinging too far)
@@ -186,21 +234,21 @@ class FlyRobotPhysics:
 
         return pe1 + pe2 + pe_spring + pe_wall
 
-    def hamiltonian(self, state):
+    def hamiltonian(self, state, props: RobotProps):
         """Computes the Hamiltonian H = T + V."""
         q, p = state[:4], state[4:]
-        M = self.get_mass_matrix(q)
+        M = self.get_mass_matrix(q, props)
         v = jnp.linalg.solve(M, p)
-        T, V = 0.5 * jnp.dot(p, v), self.potential_energy(q)
+        T, V = 0.5 * jnp.dot(p, v), self.potential_energy(q, props)
         return T + V
 
-    def dynamics_step(self, state, u_controls, dt=1e-4):
+    def dynamics_step(self, state, u_controls, props: RobotProps, dt=1e-4):
         """
         Performs a single integration step using Hamiltonian dynamics with damping.
         Calculates x_dot = (J - R) * grad(H) + u.
         """
         state = state.astype(jnp.float32)
-        dH = jax.grad(self.hamiltonian)(state)
+        dH = jax.grad(self.hamiltonian, argnums=0)(state, props)
         u_vec = jnp.concatenate([jnp.zeros(4), u_controls])
         
         # Symplectic matrix J
@@ -216,7 +264,7 @@ class FlyRobotPhysics:
         is_at_limit  = is_past_down | is_past_up
         
         # Effective hinge friction (Standard + Impact Damping)
-        b_hinge_eff = self.b_hinge + jnp.where(is_at_limit, self.b_wall, 0.0)
+        b_hinge_eff = props.b_hinge + jnp.where(is_at_limit, self.b_wall, 0.0)
 
         # Damping Matrix R
         # Diag: [0...0, D_linear, D_linear, D_angular, D_hinge]
@@ -243,12 +291,16 @@ class FlappingFlySystem:
         )
         self.robot = FlyRobotPhysics()
         
-    def step(self, params, full_state, action_data, t, dt):
+    def step(self, params, full_state, action_data, phys_params, t, dt):
         """
         Differentiable Step Function.
         Advances both the robot dynamics and the fluid environment.
         """
         robot_state_v, fluid_state = full_state
+
+       # --- 1. RESOLVE PHYSICS (Delegate to Robot Class) ---
+        # Converts "Noise" into "Physics"
+        active_props = self.robot.compute_props(phys_params)
         
         # Unpack Action Data (Includes stroke bias for steering)
         wing_angles, wing_rates, abd_torque, stroke_bias = action_data
@@ -256,14 +308,14 @@ class FlappingFlySystem:
         # --- 1. State Conversion: Velocity -> Momentum ---
         q = robot_state_v[:4] # [x, z, theta, phi]
         v = robot_state_v[4:]
-        M = self.robot.get_mass_matrix(q)
+        M = self.robot.get_mass_matrix(q, active_props)
         p = M @ v  # Momentum
         
         robot_state_p = jnp.concatenate([q, p])
         
         # --- 2. Kinematics ---
         # Get true global wing pose (Body Motion + Hinge + Bias + Oscillation)
-        wing_pose_global, wing_vel_global = self.robot.get_kinematics(robot_state_p, wing_angles, wing_rates)
+        wing_pose_global, wing_vel_global = self.robot.get_kinematics(robot_state_p, wing_angles, wing_rates, active_props)
         
         # ==================================================================
         # 3. Calculate Stroke Center Offset
@@ -273,8 +325,8 @@ class FlappingFlySystem:
         c_th, s_th = jnp.cos(theta), jnp.sin(theta)
         
         # A. Hinge Offset (Rotated to Global Frame)
-        h_x = self.robot.hinge_offset_x
-        h_z = self.robot.hinge_offset_z
+        h_x = active_props.hinge_offset_x
+        h_z = active_props.hinge_offset_z
         
         hinge_glob_x = h_x * c_th - h_z * s_th
         hinge_glob_z = h_x * s_th + h_z * c_th
@@ -288,7 +340,7 @@ class FlappingFlySystem:
         
         # B. Bias Offset (Translated along Stroke Plane)
         # The bias shifts the center of oscillation relative to the hinge.
-        total_stroke_angle = theta + self.robot.stroke_plane_angle
+        total_stroke_angle = theta + active_props.stroke_plane_angle
         c_st, s_st = jnp.cos(total_stroke_angle), jnp.sin(total_stroke_angle)
         
         bias_glob_x = stroke_bias * c_st
@@ -349,13 +401,13 @@ class FlappingFlySystem:
         u_total = u_aero + u_internal
         
         # --- 9. Robot Dynamics Step ---
-        robot_next_p = self.robot.dynamics_step(robot_state_p, u_total, dt)
+        robot_next_p = self.robot.dynamics_step(robot_state_p, u_total, active_props, dt)
         
         # --- 10. State Conversion: Momentum -> Velocity ---
         # Calculate q_next to update marker positions for the next frame
         q_next = robot_next_p[:4]
         p_next = robot_next_p[4:]
-        M_next = self.robot.get_mass_matrix(q_next)
+        M_next = self.robot.get_mass_matrix(q_next, active_props)
         v_next = jnp.linalg.solve(M_next, p_next)
         
         robot_next_v = jnp.concatenate([q_next, v_next])
