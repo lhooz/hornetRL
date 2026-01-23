@@ -456,7 +456,7 @@ def train():
         
         # 2. Terminal Value Bootstrap
         final_robot = final_full[0]
-        _, _, final_val_actor = ac_model.apply(params, final_robot)
+        _, _, final_val_actor = jax.vmap(ac_model.apply)(params, final_robot)
         final_val_actor = jnp.squeeze(final_val_actor)
         
         actor_term = jnp.mean(weighted_loss - (Config.GAMMA**Config.HORIZON * final_val_actor))
@@ -465,7 +465,7 @@ def train():
         final_val_target = jax.lax.stop_gradient(final_val_actor)
         discounted_return = jnp.dot(discounts, rewards_scaled) + (Config.GAMMA**Config.HORIZON * final_val_target)
         
-        _, _, start_val = ac_model.apply(params, start_state[0])
+        _, _, start_val = jax.vmap(ac_model.apply)(params, start_state[0])
         start_val = jnp.squeeze(start_val)
         
         critic_loss = optax.huber_loss(start_val, discounted_return, delta=1.0)
