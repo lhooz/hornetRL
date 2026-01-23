@@ -36,7 +36,7 @@ class Config:
     BASE_FREQ = 115.0  
     
     # Target State: [x, z, theta, phi, vx, vz, w_theta, w_phi]
-    TARGET_STATE = jnp.array([0.0, 0.0, 1.08, 0.3, 0.0, 0.0, 0.0, 0.0])
+    TARGET_STATE = jnp.array([0.0, 0.0, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0])
     
     # Normalization Scale: Maps physics units to Neural Network input range
     OBS_SCALE = jnp.array([
@@ -148,8 +148,7 @@ class InferenceFlyEnv:
         )
 
         # 4. Calculate Centered Wing Pose for Fluid Surrogate
-        # The surrogate expects the wing pivot to be at (0,0) in its local frame.
-        active_props = jax.vmap(self.phys.robot.compute_props)(phys_params)
+        self.active_props = jax.tree.map(lambda x: x[0], jax.vmap(self.phys.robot.compute_props)(phys_params))
 
         zero_action = jnp.zeros((batch_size, 9)) 
         ret = jax.vmap(get_wing_kinematics)(osc_state, unpack_action(zero_action))
@@ -208,7 +207,12 @@ class InferenceFlyEnv:
 
             # 2. Update Physics
             (r_next_v, f_next), _, f_nodal, wing_pose, hinge_marker = self.phys.step(
-                self.phys.fluid.params, (curr_r, curr_f), action_data, p_single, 0.0, Config.DT
+                self.phys.fluid.params, 
+                (curr_r, curr_f), 
+                action_data, 
+                self.active_props, # <--- Use the stored computed props
+                0.0, 
+                Config.DT
             )
             
             # --- Apply Perturbations (Wind Gust) ---
@@ -272,10 +276,11 @@ def run_simulation(params):
         
         # 1. Prepare Observation
         wrapped_theta = jnp.mod(r_state[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
-        obs_input = r_state.at[:, 2].set(wrapped_theta) / Config.OBS_SCALE
+        obs_input = r_state.at[:, 2].set(wrapped_theta)
+        scaled_input = obs_input / Config.OBS_SCALE # Explicitly divide the whole vector
         
         # 2. Run Policy
-        mods, _, _ = ac_model.apply(curr_params, obs_input)
+        mods, _, _ = ac_model.apply(curr_params, scaled_input)
         
         # 3. Run Environment
         next_state, frames = env.step(curr_state, mods, external_force=ext_f, external_torque=ext_t)
