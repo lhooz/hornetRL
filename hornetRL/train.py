@@ -66,12 +66,12 @@ class Config:
     HORIZON = 64            # Trajectory horizon for Back-propagation Through Time (BPTT).
                             # Duration: ~0.038s (~4.4 wingbeats), sufficient for stability convergence.
 
-    BATCH_SIZE = 5          # Number of parallel environments
+    BATCH_SIZE = 32          # Number of parallel environments
     LR_ACTOR = 5e-4         # Learning Rate
     MAX_GRAD_NORM = 1.0     # Gradient Clipping threshold
     GAMMA = 0.99            # Discount Factor
     TOTAL_UPDATES = 10000   # Total Gradient Steps
-    RESET_INTERVAL = 20     # Forced reset interval (epochs) to enforce takeoff robustness.
+    RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
     
     CKPT_DIR = "checkpoints_shac"
     VIS_DIR = "checkpoints_shac"
@@ -336,7 +336,7 @@ class FlyEnv:
         err_theta = jnp.mod(err[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
 
         # 1. Squared Errors
-        loss_pos = jnp.sum(err[:, :2]**2, axis=1)    
+        loss_pos = jnp.sqrt(jnp.sum(err[:, :2]**2, axis=1) + 1e-6)   
         loss_ang_thorax = err_theta**2             
         loss_ang_abdomen = err[:, 3]**2
         loss_lin_vel = jnp.sum(err[:, 4:6]**2, axis=1)
@@ -345,12 +345,12 @@ class FlyEnv:
         
         # 2. Weighted Cost Function (Agility Tuned)
         # Weights allow body tilt (low penalty) to facilitate lateral corrections (high penalty).
-        cost = (100000.0 * loss_pos + 
-                80.0    * loss_ang_thorax + 
-                1.0     * loss_ang_abdomen + 
+        cost = (10000.0 * loss_pos + 
+                10.0    * loss_ang_thorax + 
+                5.0     * loss_ang_abdomen + 
                 0.1     * loss_lin_vel + 
                 0.00001 * loss_ang_vel + 
-                0.05    * loss_eff)
+                0.1    * loss_eff)
         
         # 3. Soft Fence Constraint
         dist_from_center = jnp.sqrt(loss_pos)
@@ -396,7 +396,7 @@ def run_visualization(env, params, update_idx):
     state = env.reset(rng, 1) 
     
     steps_per_frame = 1
-    total_visual_frames = Config.HORIZON * 1 
+    total_visual_frames = Config.HORIZON * 4
     
     current_step_counter = 0
     

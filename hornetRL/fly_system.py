@@ -33,7 +33,7 @@ class FlyRobotPhysics:
         # Wing Hinge Geometry relative to Thorax CoM
         self.hinge_offset_x = 0.003    
         self.hinge_offset_z = 0.003    
-        self.stroke_plane_angle = -1.5707 
+        self.stroke_plane_angle = -1.3 
 
         self.g = 9.81
         
