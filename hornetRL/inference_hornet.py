@@ -16,7 +16,7 @@ import matplotlib.patches as patches
 import matplotlib.animation as animation
 
 # --- USER MODULES ---
-from .environment_surrogate import JaxSurrogateEngine
+from .fluid_surrogate import JaxSurrogateEngine
 from .fly_system import FlappingFlySystem, PhysParams
 from .neural_cpg import OscillatorState, step_oscillator, get_wing_kinematics
 from .neural_idapbc import policy_network_icnn, unpack_action
@@ -577,7 +577,31 @@ if __name__ == "__main__":
     print(f"--> Loading parameters from {param_file}")
     with open(param_file, 'rb') as f:
         data = pickle.load(f)
-        params = data['params'] if 'params' in data else data
+
+    # 1. Get raw params (Batch Size: 32)
+    raw_params = data['params'] 
+    
+    # 2. Check if PBT state exists to find the best agent
+    if 'pbt_state' in data:
+        pbt_state = data['pbt_state']
+        # Find index of agent with highest running reward
+        best_idx = np.argmax(pbt_state.running_reward)
+        print(f"--> PBT Detected. Selecting Best Agent: Index {best_idx}")
+        print(f"    Score: {pbt_state.running_reward[best_idx]:.2f}")
+        print(f"    Weights: {pbt_state.weights[best_idx]}")
+        
+        # Extract specific index from the batch
+        params = jax.tree.map(lambda x: x[best_idx], raw_params)
+        
+    else:
+        # Fallback: Just take the first one if no PBT state (or if it's a legacy checkpoint)
+        print("--> No PBT state found. Using Agent 0.")
+        # Check if batched by looking at first leaf
+        first_leaf = jax.tree_util.tree_leaves(raw_params)[0]
+        if len(first_leaf.shape) > 2: # Heuristic: Dense weights usually 2D, Batched is 3D
+             params = jax.tree.map(lambda x: x[0], raw_params)
+        else:
+             params = raw_params # It was already unbatched (e.g., single expert)
         
     sim_data, env = run_simulation(params)
     generate_gif(sim_data, env)

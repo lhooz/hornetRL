@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-from .environment_surrogate import JaxSurrogateEngine
+from .fluid_surrogate import JaxSurrogateEngine
 from typing import NamedTuple
 
 # --- Define the Data Structures ---
@@ -61,7 +61,7 @@ class FlyRobotPhysics:
         # Wing Hinge Geometry relative to Thorax CoM
         self.hinge_offset_x = 0.003    
         self.hinge_offset_z = 0.003    
-        self.stroke_plane_angle = -1.3 
+        self.stroke_plane_angle = -1.35 
 
         self.g = 9.81
         
