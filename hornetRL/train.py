@@ -70,7 +70,7 @@ class Config:
     LR_ACTOR = 5e-4         # Learning Rate
     MAX_GRAD_NORM = 1.0     # Gradient Clipping threshold
     GAMMA = 0.99            # Discount Factor
-    TOTAL_UPDATES = 10000   # Total Gradient Steps
+    TOTAL_UPDATES = 100000   # Total Gradient Steps
     RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
     
     CKPT_DIR = "checkpoints_shac"

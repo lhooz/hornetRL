@@ -159,7 +159,7 @@ class InferenceFlyEnv:
         wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics)(robot_state_dummy, k_angles, k_rates, active_props)
         
         # --- Center Pose Logic ---
-        def get_centered_pose(r_state, w_pose_glob, bias_val):
+        def get_centered_pose(r_state, w_pose_glob, bias_val, props):
             q, theta = r_state[:4], r_state[2]
             h_x, h_z = props.hinge_offset_x, props.hinge_offset_z
             c_th, s_th = jnp.cos(theta), jnp.sin(theta)
