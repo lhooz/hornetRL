@@ -155,7 +155,8 @@ class InferenceFlyEnv:
         k_angles, k_rates = ret[0], ret[1]
         
         robot_state_dummy = jnp.concatenate([robot_state_v[:, :4], jnp.zeros((batch_size, 4))], axis=1)
-        wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics)(robot_state_dummy, k_angles, k_rates, self.active_props)
+        # in_axes (0, 0, 0, None) means map the first 3 args, but treat the 4th (props) as a single value
+        wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics, in_axes=(0, 0, 0, None))(robot_state_dummy, k_angles, k_rates, self.active_props)
         
         # --- Center Pose Logic ---
         def get_centered_pose(r_state, w_pose_glob, bias_val, props):
@@ -177,7 +178,8 @@ class InferenceFlyEnv:
             p_y = w_pose_glob[1] - (q[1] + off_z)
             return jnp.array([p_x, p_y, w_pose_glob[2]])
 
-        wing_pose_centered = jax.vmap(get_centered_pose)(robot_state_v, wing_pose_global, osc_state.bias, self.active_props)
+        # Again, tell vmap the last argument (props) is not batched
+        wing_pose_centered = jax.vmap(get_centered_pose, in_axes=(0, 0, 0, None))(robot_state_v, wing_pose_global, osc_state.bias, self.active_props)
         
         def init_fluid_fn(wp): return self.phys.fluid.init_state(wp[0], wp[1], wp[2])
         fluid_state = jax.vmap(init_fluid_fn)(wing_pose_centered)
