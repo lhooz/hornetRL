@@ -290,7 +290,7 @@ class FlyEnv:
         single_agent_step_remat = jax.checkpoint(single_agent_step)
 
         # Vectorize over batch
-        r_n, f_n, o_n, f_act, f_nodal_b, w_pose_b, h_marker_b = jax.vmap(single_agent_step_remat)(robot_st, fluid_st, osc_st, , active_props, action_mods)
+        r_n, f_n, o_n, f_act, f_nodal_b, w_pose_b, h_marker_b = jax.vmap(single_agent_step_remat)(robot_st, fluid_st, osc_st, active_props, action_mods)
         
         return (r_n, f_n, o_n, active_props), f_act, f_nodal_b, w_pose_b, h_marker_b
 
