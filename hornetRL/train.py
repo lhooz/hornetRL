@@ -116,6 +116,8 @@ def actor_critic_fn(robot_state):
     
     return mods, forces, value
 
+ac_model = hk.without_apply_rng(hk.transform(actor_critic_fn))
+
 # ==============================================================================
 # 3. VISUALIZATION ENGINE
 # ==============================================================================
