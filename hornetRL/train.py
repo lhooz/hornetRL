@@ -530,7 +530,7 @@ def train():
             print(f"DEBUG: Spawn Theta: {curr_state[0][0, 2]:.4f}")
 
         # 1. Update Step
-        params, opt_state, loss, logs, next_state, key_explore = update(params, opt_state, curr_state, pbt_state, key_explore)
+        params, opt_state, loss, logs, next_state, pbt_state, key_explore = update(params, opt_state, curr_state, pbt_state, key_explore)
     
         # 2. Stability Checks
         if jnp.isnan(loss):
