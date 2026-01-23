@@ -1,13 +1,17 @@
 # hornetRL/__init__.py
 
-from .environment_surrogate import JaxSurrogateEngine
-from .fly_system import FlappingFlySystem
+# Core Physics & Surrogate
+from .fluid_surrogate import JaxSurrogateEngine
+from .fly_system import FlappingFlySystem, PhysParams
+
+# Neural Control & CPG
 from .neural_cpg import OscillatorState, step_oscillator, get_wing_kinematics
 from .neural_idapbc import policy_network_icnn, unpack_action
 
-# Expose the inference and training modules so they can be accessed easily
-# (Optional, but helpful)
-# from . import inference_hornet
-# from . import train
+# Environment (New)
+from .env import FlyEnv
 
-__version__ = "0.1.0"
+# Population Based Training (New)
+from .pbt_manager import init_pbt_state, pbt_evolve, PBTHyperparams
+
+__version__ = "0.1.1"
