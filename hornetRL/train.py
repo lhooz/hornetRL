@@ -515,7 +515,7 @@ def train():
     print("--> Compiling JAX Update...")
     t0 = time.time()
     key_compile = jax.random.PRNGKey(0)
-    _ = update(params, opt_state, curr_state, key_compile) 
+    _ = update(params, opt_state, curr_state, pbt_state, key_compile) 
     print(f"--> Compilation Finished in {time.time() - t0:.2f}s")
 
     # --- Main Loop ---
