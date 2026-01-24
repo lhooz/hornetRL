@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.animation as animation
 from typing import NamedTuple
+from functools import partial
 
 # --- USER MODULES ---
 from .fluid_surrogate import JaxSurrogateEngine
@@ -130,7 +131,7 @@ ac_model = hk.without_apply_rng(hk.transform(actor_critic_fn))
 # ==============================================================================
 # 3. VISUALIZATION ENGINE
 # ==============================================================================
-def run_visualization(env, params, update_idx):
+def run_visualization(env, params, update_idx, vis_step_fn):
     """
     Generates a GIF visualization of the flight trajectory and aerodynamic forces.
     """
@@ -155,30 +156,6 @@ def run_visualization(env, params, update_idx):
     params_single = jax.tree.map(lambda x: x[0], params)
 
     current_step_counter = 0
-    
-    # JIT-COMPILED STEP FUNCTION
-    # Compile Brain + Physics into one kernel to prevent OOM and speed up rendering.
-    @jax.jit
-    def vis_step(curr_state, curr_params, step_idx):
-        r_st = curr_state[0]
-        
-        # 1. Prepare Observation
-        wrapped_th = jnp.mod(r_st[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
-        obs_v = r_st.at[:, 2].set(wrapped_th)
-        scaled_obs = obs_v / Config.OBS_SCALE
-        
-        # 2. Policy Inference
-        mods, _, _ = ac_model.apply(curr_params, scaled_obs)
-        
-        # 3. Environment Step
-        next_state, _, f_nodal, w_pose, h_marker = env.step_batch(curr_state, mods, step_idx=step_idx)
-        
-        return next_state, f_nodal, w_pose, h_marker
-
-    # Warmup JIT (Critical to prevent lag/crash on first frame)
-    print("--> Compiling Visualization JIT...")
-    _ = vis_step(state, params_single, 0)
-    print("--> Compilation Complete!")
 
     for i in range(total_visual_frames):
         # --- Visualization Loop ---
@@ -192,7 +169,7 @@ def run_visualization(env, params, update_idx):
                 break
             
             # Environment Step
-            state, f_nodal, w_pose, h_marker = vis_step(state, params_single, current_step_counter)
+            state, f_nodal, w_pose, h_marker = vis_step_fn(env, state, params_single, current_step_counter)
             current_step_counter += 1
 
         # Record Frame Data
@@ -471,7 +448,12 @@ def train():
         
         # 2. Terminal Value Bootstrap
         final_robot = final_full[0]
-        _, _, final_val_actor = jax.vmap(ac_model.apply)(params, final_robot)
+
+        # Wrap and Scale terminal state (Raw -> Obs)
+        f_wrapped_th = jnp.mod(final_robot[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
+        final_obs = final_robot.at[:, 2].set(f_wrapped_th) / Config.OBS_SCALE
+
+        _, _, final_val_actor = jax.vmap(ac_model.apply)(params, final_obs)
         final_val_actor = jnp.squeeze(final_val_actor)
         
         actor_term = jnp.mean(weighted_loss - (Config.GAMMA**Config.HORIZON * final_val_actor))
@@ -480,7 +462,12 @@ def train():
         final_val_target = jax.lax.stop_gradient(final_val_actor)
         discounted_return = jnp.dot(discounts, rewards_scaled) + (Config.GAMMA**Config.HORIZON * final_val_target)
         
-        _, _, start_val = jax.vmap(ac_model.apply)(params, start_state[0])
+        # Wrap and Scale start state (Raw -> Obs)
+        start_robot = start_state[0]
+        s_wrapped_th = jnp.mod(start_robot[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
+        start_obs = start_robot.at[:, 2].set(s_wrapped_th) / Config.OBS_SCALE
+
+        _, _, start_val = jax.vmap(ac_model.apply)(params, start_obs)
         start_val = jnp.squeeze(start_val)
         
         critic_loss = optax.huber_loss(start_val, discounted_return, delta=1.0)
@@ -648,7 +635,27 @@ def train():
                     'pbt_state': pbt_state 
                 }, f)
             print(f"--> Saved Checkpoint: {ckpt_path}")
-            run_visualization(env, params, i)
+            run_visualization(env, params, i, vis_step_fn)
+
+# Global Visualization Step for JIT efficiency
+# static_argnums=(0,) tells JAX: "The 0th argument (env) is a Python object/class, 
+# not an array. Bake it into the compiled code as a constant."
+@partial(jax.jit, static_argnums=(0,))
+def vis_step_fn(env, curr_state, curr_params, step_idx):
+    r_st = curr_state[0]
+    
+    # 1. Prepare Observation (Same logic as before)
+    wrapped_th = jnp.mod(r_st[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
+    obs_v = r_st.at[:, 2].set(wrapped_th)
+    scaled_obs = obs_v / Config.OBS_SCALE
+    
+    # 2. Policy Inference (Uses global ac_model)
+    mods, _, _ = ac_model.apply(curr_params, scaled_obs)
+    
+    # 3. Env Step (Uses the passed 'env' object)
+    next_state, _, f_nodal, w_pose, h_marker = env.step_batch(curr_state, mods, step_idx=step_idx)
+    
+    return next_state, f_nodal, w_pose, h_marker
 
 if __name__ == "__main__":
     import argparse

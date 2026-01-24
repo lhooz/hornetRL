@@ -66,12 +66,12 @@ class Config:
     
     # --- Robustness Testing (Wind Gust) ---
     PERTURBATION = True  
-    PERTURB_TIME = 0.05  # Time of impact (s)
+    PERTURB_TIME = 0.02  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.6, -1.0]) 
+    PERTURB_FORCE = jnp.array([1.2, -2.0]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.0015
+    PERTURB_TORQUE = -0.003
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -90,8 +90,12 @@ def actor_critic_fn(robot_state):
         obs_scale=Config.OBS_SCALE
     )
     
-    # 2. Dummy Critic (Placeholder for weight compatibility)
-    value = jnp.zeros((1, 1))
+    # 2. Critic (Exact match to training to preserve parameter structure)
+    value = hk.Sequential([
+        hk.Linear(128), jax.nn.tanh,
+        hk.Linear(128), jax.nn.tanh,
+        hk.Linear(1)
+    ])(robot_state)
     
     return mods, forces, value
 
@@ -301,7 +305,7 @@ def run_simulation(params):
         ext_t = 0.0
         
         if Config.PERTURBATION:
-            if Config.PERTURB_TIME <= t_sim <= Config.PERTURB_TIME + 0.005:
+            if Config.PERTURB_TIME <= t_sim <= Config.PERTURB_TIME + 0.002:
                 ext_f = Config.PERTURB_FORCE
                 ext_t = Config.PERTURB_TORQUE
         

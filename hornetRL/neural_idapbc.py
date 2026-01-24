@@ -107,10 +107,6 @@ class NeuralIDAPBC_ICNN(hk.Module):
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         
     def __call__(self, x):
-        
-        
-        # Apply Normalization to handle unit variance in observations
-        x_norm = self.norm(x)
 
         # Split state into Generalized Coordinates (q) and Momentum/Velocity (p)
         # Note: x is already scaled by the environment wrapper
@@ -132,7 +128,7 @@ class NeuralIDAPBC_ICNN(hk.Module):
         # 2. Damping Injection (Dissipation)
         # Predict dynamic damping gains based on system state
         net_R = hk.Sequential([hk.Linear(32), jax.nn.tanh, hk.Linear(4)])
-        raw_damp = net_R(x_norm)
+        raw_damp = net_R(x)
         
         damping_gains = (jax.nn.softplus(raw_damp) * ScaleConfig.DAMPING_SCALE) + ScaleConfig.DAMPING_BASE
         damping_force = -damping_gains * p
