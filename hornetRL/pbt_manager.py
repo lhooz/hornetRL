@@ -42,7 +42,8 @@ def init_pbt_state(key: jax.Array, batch_size: int, base_weights: jnp.ndarray) -
 # ==============================================================================
 # static_argnums=(4, 5) tells JAX that perturb_factor and truncate_fraction 
 # are static constants and should not be treated as traced arrays.
-@jax.jit(static_argnums=(4, 5))
+# Use names instead of numbers to avoid confusion with the decorator wrapper
+@jax.jit(static_argnames=("perturb_factor", "truncate_fraction"))
 def pbt_evolve(
     key: jax.Array,
     params: Any,
