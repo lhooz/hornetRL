@@ -480,6 +480,8 @@ def train():
             'rew_per_agent': jnp.mean(real_rews, axis=0),
             'ferr': jnp.mean(f_errs),
             'pos': jnp.mean(m_pos),
+            # NEW: Keep batch dimension for PBT ranking
+            'pos_per_agent': jnp.mean(m_pos, axis=0), 
             'ang_th': jnp.mean(m_ang_th),
             'ang_ab': jnp.mean(m_ang_ab),
             'vel_lin': jnp.mean(m_vel_lin),
@@ -504,7 +506,7 @@ def train():
         # Update PBT Running Reward (EMA)
         # Use the raw position error from the logs. 
         # We negate it so that "Small Error" becomes "High Score" (e.g. -0.01 > -5.0)
-        current_score = -1.0 * logs['pos'] 
+        current_score = -1.0 * logs['pos_per_agent']
 
         new_running = 0.95 * pbt_state.running_reward + 0.05 * current_score
         new_pbt_state = pbt_state._replace(running_reward=new_running)
