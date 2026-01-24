@@ -58,11 +58,11 @@ class FlyEnv:
         # Angle Setup:
         # 1. Pitch: Upright (~1.08 rad)
         theta_nom = jax.random.uniform(k2_n, (n_nominal, 1), minval=-0.1, maxval=0.1)
-        theta_nom = theta_nom + 1.08
+        theta_nom = theta_nom + 1.0
         
         # 2. Abdomen: Equilibrium (~0.3 rad) to minimize initial internal stress
         phi_nom = jax.random.uniform(k2_n, (n_nominal, 1), minval=-0.1, maxval=0.1)
-        phi_nom = phi_nom + 0.3
+        phi_nom = phi_nom + 0.2
         
         q_ang_nom = jnp.concatenate([theta_nom, phi_nom], axis=-1)
         

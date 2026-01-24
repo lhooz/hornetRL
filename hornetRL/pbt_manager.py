@@ -40,8 +40,9 @@ def init_pbt_state(key: jax.Array, batch_size: int, base_weights: jnp.ndarray) -
 # ==============================================================================
 # 2. EVOLUTION LOGIC (JIT COMPATIBLE)
 # ==============================================================================
-@jax.jit
-def pbt_evolve(
+# static_argnums=(4, 5) tells JAX that perturb_factor and truncate_fraction 
+# are static constants and should not be treated as traced arrays.
+@jax.jit(static_argnums=(4, 5))
     key: jax.Array,
     params: Any,
     opt_state: Any,
