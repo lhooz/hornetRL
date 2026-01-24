@@ -502,9 +502,11 @@ def train():
         new_params = optax.apply_updates(params, updates)
         
         # Update PBT Running Reward (EMA)
-        # Note: You must ensure logs['rew'] is the per-agent reward array, NOT the mean!
-        current_rewards = logs['rew_per_agent'] 
-        new_running = 0.95 * pbt_state.running_reward + 0.05 * current_rewards
+        # Use the raw position error from the logs. 
+        # We negate it so that "Small Error" becomes "High Score" (e.g. -0.01 > -5.0)
+        current_score = -1.0 * logs['pos'] 
+
+        new_running = 0.95 * pbt_state.running_reward + 0.05 * current_score
         new_pbt_state = pbt_state._replace(running_reward=new_running)
 
         return new_params, new_opt, loss, logs, next_state, new_pbt_state, key_next
