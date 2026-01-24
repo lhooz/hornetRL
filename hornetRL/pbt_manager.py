@@ -87,9 +87,14 @@ def pbt_evolve(
     # ---------------------------------------------------------
     # 2. EXPLOIT (Copy Winners -> Losers)
     # ---------------------------------------------------------
-    # Helper to copy specific indices in a batch array
     def copy_subset(array_leaf):
         # Array shape is (Batch, ...)
+        
+        # FIX: Check if the leaf is a scalar (0-dimensional). 
+        # Global optimizer counts or stats don't have a batch dimension.
+        if array_leaf.ndim == 0:
+            return array_leaf
+            
         # Extract winner values
         replacements = array_leaf[chosen_winners]
         # Update loser positions with winner values
