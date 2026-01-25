@@ -4,7 +4,8 @@
 
 Key features include:
 * **Short-Horizon Actor-Critic (SHAC):** Efficient reinforcement learning utilizing differentiable simulation gradients.
-* **High-Fidelity Physics:** High-frequency unsteady aerodynamics via a differentiable surrogate model.
+* **Population Based Training (PBT):** Automatic curriculum learning and hyperparameter evolution for robust policy synthesis.
+* **High-Fidelity Physics:** Time-resolved unsteady aerodynamics via a differentiable surrogate model, utilizing a multirate substepping scheme.
 * **Bio-Inspired Actuation:** A Central Pattern Generator (CPG) based muscle model.
 * **Structured Control:** A Neural IDA-PBC policy architecture that guarantees physical consistency.
 
@@ -18,15 +19,18 @@ Run the full training demo in your browser with zero setup:
 ```text
 hornetRL_repo/                <-- Repository Root
 ├── hornetRL/                 <-- Main Package
-│   ├── environment_surrogate.py  # JAX surrogate for unsteady aerodynamics
-│   ├── fly_system.py             # Port-Hamiltonian Multi-body dynamics
-│   ├── neural_cpg.py             # Oscillator & Muscle mapping
-│   ├── neural_idapbc.py          # Neural IDA-PBC Policy
-│   ├── train.py                  # Training loop (SHAC)
-│   ├── inference_hornet.py       # Visualization & Inference
-│   └── fluid.pkl                 # Pre-trained fluid dynamics data
+│   ├── __init__.py           # Package initialization
+│   ├── fluid_surrogate.py    # JAX surrogate for unsteady aerodynamics
+│   ├── fly_system.py         # Port-Hamiltonian Multi-body dynamics
+│   ├── neural_cpg.py         # Oscillator & Muscle mapping
+│   ├── neural_idapbc.py      # Neural IDA-PBC Policy
+│   ├── env.py                # RL Environment wrapper (FlyEnv)
+│   ├── pbt_manager.py        # Population Based Training logic
+│   ├── train.py              # Training loop (SHAC)
+│   ├── inference_hornet.py   # Visualization & Inference
+│   └── fluid.pkl             # Pre-trained fluid dynamics data
 ├── notebooks/                <-- Demo Notebooks
-│   └── demo_train.ipynb          # Colab-ready training script
+│   └── demo_train.ipynb      # Colab-ready training script
 ├── pyproject.toml
 └── README.md
 
@@ -41,7 +45,7 @@ hornetRL_repo/                <-- Repository Root
 Clone the repository and install it in editable mode:
 
 ```bash
-git clone [https://github.com/lhooz/hornetRL.git](https://github.com/lhooz/hornetRL.git)
+git clone https://github.com/lhooz/hornetRL.git
 cd hornetRL
 pip install -e .
 
@@ -52,7 +56,7 @@ pip install -e .
 You can install directly from GitHub inside a Colab notebook:
 
 ```python
-!pip install git+[https://github.com/lhooz/hornetRL.git](https://github.com/lhooz/hornetRL.git)
+!pip install git+https://github.com/lhooz/hornetRL.git
 
 ```
 
@@ -115,3 +119,6 @@ Key simulation parameters can be found in `hornetRL/train.py` (for training hype
 * [Optax](https://github.com/deepmind/optax)
 * [Matplotlib](https://matplotlib.org/)
 * [NumPy](https://numpy.org/)
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
