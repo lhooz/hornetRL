@@ -69,9 +69,9 @@ class Config:
     PERTURB_TIME = 0.02  # Time of impact (s)
     
     # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([-1.2, -2.0]) 
+    PERTURB_FORCE = jnp.array([1.2, -2.0]) 
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.003
+    PERTURB_TORQUE = 0.003
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -424,7 +424,7 @@ def generate_gif(data, env):
     arrow_force = patches.FancyArrow(0, 0, 0, 0, width=0.005, color='red', zorder=20, alpha=0.0)
     ax.add_patch(arrow_force)
     
-    text_torque = ax.text(0, 0, '⟳', fontsize=30, color='orange', ha='center', va='center', fontweight='bold', zorder=20, alpha=0.0)
+    text_torque = ax.text(0, 0, '', fontsize=30, color='orange', ha='center', va='center', fontweight='bold', zorder=20, alpha=0.0)
     
     txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, fontweight='bold', family='monospace')
     txt_info = ax.text(0.05, 0.90, '', transform=ax.transAxes, fontsize=10, family='monospace', color='#333333')
@@ -523,13 +523,34 @@ def generate_gif(data, env):
         
         if is_force:
             arrow_force.set_alpha(1.0)
-            arrow_force.set_data(x=rx-0.05, y=rz, dx=0.03, dy=0) 
+
+            # 1. Get physics force direction
+            fx, fz = Config.PERTURB_FORCE
+    
+            # 2. Normalize it to a fixed arrow length (e.g., 0.03m)
+            mag = np.sqrt(fx**2 + fz**2) + 1e-6
+            d_x = (fx / mag) * 0.03
+            d_z = (fz / mag) * 0.03
+    
+            # 3. Position the tail "behind" the force so the tip hits the fly (rx, rz)
+            # We subtract the direction vector to find the tail position
+            start_x = rx - d_x * 1.5  # 1.5 is a spacing multiplier
+            start_z = rz - d_z * 1.5
+    
+            arrow_force.set_data(x=start_x, y=start_z, dx=d_x, dy=d_z)
+
         else:
             arrow_force.set_alpha(0.0)
             
         if is_torque:
             text_torque.set_alpha(1.0)
             text_torque.set_position((rx, rz + 0.02)) 
+
+            # Check the torque value from Config
+            if Config.PERTURB_TORQUE > 0:
+                text_torque.set_text('⟲') # Pitch Up / Counter-Clockwise
+            else:
+                text_torque.set_text('⟳') # Pitch Down / Clockwise
         else:
             text_torque.set_alpha(0.0)
             
