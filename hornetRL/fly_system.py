@@ -47,12 +47,12 @@ class FlyRobotPhysics:
         
         # --- Mass Properties (kg) ---
         # Scaled for a total mass of ~1.5g (Hornet scale)
-        self.m_thorax = 0.0011   # 1.1 grams      
-        self.m_abdomen = 0.0004  # 0.4 grams        
+        self.m_thorax = 0.0008   # 0.8 grams      
+        self.m_abdomen = 0.0007  # 0.7 grams        
         
         # --- Inertia Tensor (kg*m^2) ---
-        self.I_thorax = 2.0e-8               
-        self.I_abdomen = 1.5e-8        
+        self.I_thorax = 1.5e-8               
+        self.I_abdomen = 2.6e-8        
         
         # Center of Mass distances from the joint
         self.d1 = self.L_thorax / 2.0 
@@ -73,8 +73,8 @@ class FlyRobotPhysics:
 
         # --- Abdomen Joint Properties ---
         # Passive stiffness (tendon) and equilibrium angle
-        self.k_hinge = 5e-5    
-        self.b_hinge = 5e-6      
+        self.k_hinge = 1.0e-4    
+        self.b_hinge = 1.0e-5      
         self.phi_equilibrium = 0.2
 
         # --- Joint Limits (Asymmetric) ---
@@ -85,10 +85,10 @@ class FlyRobotPhysics:
         self.limit_up = -0.6
         
         # Wall Stiffness: Hard stop (~100x stiffer than tendon)
-        self.k_wall = 0.01
+        self.k_wall = 0.02
         
         # Wall Damping: Dissipates energy on impact to prevent bouncing
-        self.b_wall = 5e-4
+        self.b_wall = 1e-3
 
     def compute_props(self, p: PhysParams) -> RobotProps:
         """
