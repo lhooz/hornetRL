@@ -44,7 +44,7 @@ class FlyEnv:
         # =========================================================
         # 1. INIT ROBOT STATE (Curriculum Strategy)
         # =========================================================
-        ratio = getattr(self.cfg, 'CURRICULUM_RATIO', 1.0) # Default to 0.8 if missing
+        ratio = getattr(self.cfg, 'CURRICULUM_RATIO', 0.8) # Default to 0.8 if missing
         
         n_nominal = int(batch_size * ratio)
         n_chaos = batch_size - n_nominal
