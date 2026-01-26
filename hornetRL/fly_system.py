@@ -84,11 +84,11 @@ class FlyRobotPhysics:
         # Negative Phi = Curling UP (Towards Wings) -> Small Range (~35 deg)
         self.limit_up = -0.6
         
-        # Wall Stiffness: Hard stop (~100x stiffer than tendon)
-        self.k_wall = 0.02
+        # Wall Stiffness: Hard stop (~20x stiffer than tendon)
+        self.k_wall = 0.002
         
         # Wall Damping: Dissipates energy on impact to prevent bouncing
-        self.b_wall = 1e-3
+        self.b_wall = 2e-3
 
     def compute_props(self, p: PhysParams) -> RobotProps:
         """

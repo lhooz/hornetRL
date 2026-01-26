@@ -506,7 +506,7 @@ def train():
         # Update PBT Running Reward (EMA)
         # Use the raw position error from the logs. 
         # We negate it so that "Small Error" becomes "High Score" (e.g. -0.01 > -5.0)
-        current_score = -1.0 * logs['pos_per_agent']
+        current_score = -1.0 * (logs['pos_per_agent'] * 100.0)
 
         new_running = 0.95 * pbt_state.running_reward + 0.05 * current_score
         new_pbt_state = pbt_state._replace(running_reward=new_running)
@@ -614,9 +614,10 @@ def train():
                 truncate_fraction=Config.PBT_TRUNCATE_FRACTION
             )
         
-            # Print best weights
+            # Print best weights with Score in CM
             best_idx = jnp.argmax(pbt_state.running_reward)
-            print(f"    Best Weights: {pbt_state.weights[best_idx]}")
+            best_score = pbt_state.running_reward[best_idx]
+            print(f"    Best Score: {best_score:.2f} cm | Weights: {pbt_state.weights[best_idx]}")
 
             # 2. Force Environment Reset
             curr_state = env.reset(rng, Config.BATCH_SIZE)
