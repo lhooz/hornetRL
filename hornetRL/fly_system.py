@@ -67,9 +67,9 @@ class FlyRobotPhysics:
         
         # --- Damping Coefficients ---
         # Linear: Reduced to ~5% of weight at 1m/s
-        self.damping_linear = 8e-4          
+        self.damping_linear = 1.6e-3          
         # Angular: Tuned to allow muscle torque authority
-        self.damping_angular = 1e-5
+        self.damping_angular = 5e-5
 
         # --- Abdomen Joint Properties ---
         # Passive stiffness (tendon) and equilibrium angle
