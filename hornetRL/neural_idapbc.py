@@ -23,10 +23,12 @@ class ScaleConfig:
     CONTROL_SCALE = jnp.array([0.05, 0.05, 1.5e-4, 2.0e-4])
 
     # Damping Baseline: Low drag for efficient flight
-    DAMPING_BASE = jnp.array([0.005, 0.005, 1.0e-4, 5.0e-5])
+    # DAMPING_BASE = jnp.array([0.005, 0.005, 1.0e-4, 5.0e-5])
+    DAMPING_BASE = jnp.array([0.005, 0.005, 0.0, 5.0e-5])
 
     # Damping Range: Allows strong braking (linear) and precise attitude control (angular)
-    DAMPING_SCALE = jnp.array([0.05, 0.05, 1.5e-4, 2.0e-4])
+    # DAMPING_SCALE = jnp.array([0.05, 0.05, 1.5e-4, 2.0e-4])
+    DAMPING_SCALE = jnp.array([0.05, 0.05, 1.5e-6, 2.0e-4])
 
 
 # ==============================================================================
