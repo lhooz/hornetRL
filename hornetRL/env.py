@@ -71,13 +71,15 @@ class FlyEnv:
         k_theta, k_phi = jax.random.split(k2_c)
         
         # Position: Wide window (+/- 30cm)
-        q_pos_chaos = jax.random.uniform(k1_c, (n_chaos, 2), minval=-0.30, maxval=0.30)
+        q_pos_chaos = jax.random.uniform(k1_c, (n_chaos, 2), minval=-0.15, maxval=0.15)
         
-        # Pitch: Full 360-degree randomization
-        theta_chaos = jax.random.uniform(k_theta, (n_chaos, 1), minval=-jnp.pi, maxval=jnp.pi)
+        # Pitch: Increased randomization range
+        theta_chaos = jax.random.uniform(k_theta, (n_chaos, 1), minval=-0.5, maxval=0.5)
+        theta_chaos = theta_chaos + 1.0
         
-        # Abdomen: Randomized within physical limits (-0.6 to 1.4)
-        phi_chaos = jax.random.uniform(k_phi, (n_chaos, 1), minval=-0.6, maxval=1.4)
+        # Abdomen: Increased randomization range; limits (-0.6 to 1.4)
+        phi_chaos = jax.random.uniform(k_phi, (n_chaos, 1), minval=-0.3, maxval=0.3)
+        phi_chaos = phi_chaos + 0.2
         
         q_ang_chaos = jnp.concatenate([theta_chaos, phi_chaos], axis=-1)
         
@@ -87,7 +89,7 @@ class FlyEnv:
         q_ang_ordered = jnp.concatenate([q_ang_nom, q_ang_chaos], axis=0)
         v_ordered     = jnp.zeros((batch_size, 4))
         
-        # --- CRITICAL FIX: SHUFFLE THE BATCH ---
+        # --- SHUFFLE THE BATCH ---
         # This ensures the "Chaos" condition rotates randomly among agents
         perm = jax.random.permutation(k_shuffle, batch_size)
         

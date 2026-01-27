@@ -65,7 +65,7 @@ class Config:
 
     # % Nominal (Hover), % Chaos (Recovery)
     # Set to 1.0 for easier initial training, 0.8 for robustness
-    CURRICULUM_RATIO = 1.0
+    CURRICULUM_RATIO = 0.5
     
     # --- PBT Hyperparameters ---
     # Initial Reward Weights: [Pos, Th_Ang, Ab_Ang, Lin_Vel, Ang_Vel, Eff]
