@@ -246,7 +246,7 @@ class JaxSurrogateEngine:
 
         # --- 3. Predict Forces ---
         # Apply scaling factor consistent with training domain
-        aero_forces_loc = self.predict_aero_forces(params, state_loc) * 4.0
+        aero_forces_loc = self.predict_aero_forces(params, state_loc) * 8.0
 
         # --- 4. Frame Transformation (Local -> Global) ---
         # Transform positions and velocities back to global
