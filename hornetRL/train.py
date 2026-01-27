@@ -54,14 +54,15 @@ class Config:
                             
     HORIZON = 64            # Trajectory horizon for Back-propagation Through Time (BPTT).
                             # Duration: ~0.038s (~4.4 wingbeats), sufficient for stability convergence.
+    RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
+    PBT_INTERVAL = 500      # Evolution interval (Survival of the fittest)
 
     BATCH_SIZE = 32          # Number of parallel environments
     LR_ACTOR = 5e-4         # Learning Rate
     MAX_GRAD_NORM = 1.0     # Gradient Clipping threshold
     GAMMA = 0.99            # Discount Factor
-    TOTAL_UPDATES = 100000   # Total Gradient Steps
-    RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
     OBS_NOISE_SIGMA = 0.05  # Observation noise sigma
+    TOTAL_UPDATES = 100000   # Total Gradient Steps
 
     # % Nominal (Hover), % Chaos (Recovery)
     # Set to 1.0 for easier initial training, 0.8 for robustness
@@ -70,7 +71,7 @@ class Config:
     # --- PBT Hyperparameters ---
     # Initial Reward Weights, act as the "center" of the search distribution.
     PBT_BASE_WEIGHTS = jnp.array([
-        10.0,    # Pos (The "Pot of Gold" max value)
+        50.0,    # Pos (The "Pot of Gold" max value)
         2.0,     # Th_Ang (Orientation penalty)
         1.0,     # Ab_Ang (Abdomen stability)
         0.1,     # Lin_Vel (Drift damping)
@@ -555,11 +556,7 @@ def train():
         is_nan = jnp.isnan(r_state).any(axis=1)
         is_crashed = (jnp.abs(r_state[:, 0]) > Config.ARENA_W) | (jnp.abs(r_state[:, 1]) > Config.ARENA_W)
         
-        # B. Periodic Timeout (Infinite Horizon Guard)
-        # Forces the agent to practice takeoff and stabilization repeatedly.
-        is_timeout = (i > 0) & (i % Config.RESET_INTERVAL == 0)
-        
-        reset_mask = is_nan | is_crashed | is_timeout
+        reset_mask = is_nan | is_crashed
     
         rng, k_res = jax.random.split(rng)
         fresh_state = env.reset(k_res, Config.BATCH_SIZE)
@@ -603,16 +600,18 @@ def train():
         thorax_vel = next_state[0][:, 6]
         thorax_mag = jnp.mean(jnp.abs(thorax_vel))
 
-        if i % Config.RESET_INTERVAL == 0 and i > 0:
+        # --- A. PBT EVOLUTION (Slow Cycle) ---
+        # Triggered less frequently to allow learning/exploration
+        performed_pbt = False
+        if i % Config.PBT_INTERVAL == 0 and i > 0:
             print(f"--> PBT EVOLUTION (Step {i})")
             rng, k_pbt = jax.random.split(rng)
 
-            # Print best weights with Score in CM
+            # Print best weights
             best_idx = jnp.argmax(pbt_state.running_reward)
             best_score = pbt_state.running_reward[best_idx]
             print(f"    Best Score: {best_score:.2f} cm | Weights: {pbt_state.weights[best_idx]}")
         
-            # Run the logic from the standalone script
             params, opt_state, pbt_state = pbt_evolve(
                 k_pbt, 
                 params, 
@@ -621,8 +620,16 @@ def train():
                 perturb_factor=Config.PBT_PERTURB_FACTOR,
                 truncate_fraction=Config.PBT_TRUNCATE_FRACTION
             )
-        
-            # 2. Force Environment Reset
+            performed_pbt = True # Mark that we just changed brains
+
+        # --- B. FORCED RESET (Fast Cycle) ---
+        # Triggered frequently to practice takeoff robustness
+        # OR triggered immediately if PBT happened (Mutants need a fresh start)
+        if (i % Config.RESET_INTERVAL == 0 and i > 0) or performed_pbt:
+            if performed_pbt:
+                print("    -> PBT Mutation applied. Forcing Environment Reset.")
+            
+            # Force Environment Reset
             curr_state = env.reset(rng, Config.BATCH_SIZE)
 
         print(f"Step {i:04d} | Epoch: {dt_epoch:.2f}s | Total: {total_elapsed/60:.1f}min | "

@@ -328,9 +328,9 @@ class FlyEnv:
         wall_limit = 0.20
         violation = jax.nn.relu(dist - wall_limit)
         
-        # Quadratic penalty: The further out, the harder the push back.
-        # Multiplied by 1000.0 to ensure it overrides other incentives.
-        rew_safety = -1000.0 * (violation ** 2)
+        # Linear penalty: The further out, the harder the push back.
+        penalty_scale = 20.0 * w_pos # Multiplier
+        rew_safety = -penalty_scale * violation
 
         # --- 4. Other Dynamic Costs (Negative) ---
         # We assume these remaining weights are for Costs (penalties)
