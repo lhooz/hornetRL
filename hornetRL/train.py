@@ -84,7 +84,7 @@ class Config:
 
     CKPT_DIR = "checkpoints_shac"
     VIS_DIR = "checkpoints_shac"
-    AUX_LOSS_WEIGHT = 100.0   
+    AUX_LOSS_WEIGHT = 10.0   
     VIS_INTERVAL = 200      
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
@@ -629,7 +629,7 @@ def train():
               f"Loss: {loss:.1e} (A:{logs['act_loss']:.1e} C:{logs['crit_loss']:.1e}) | "
               f"Rew: {logs['rew']:.1f}\n"
               f"    -> Errs[Pos:{logs['pos']:.2f} Th:{logs['ang_th']:.2f} Ab:{logs['ang_ab']:.2f} "
-              f"LVel:{logs['vel_lin']:.2f} AVel:{logs['vel_ang']:.2f} Frc:{logs['ferr']:.1f}] | "
+              f"LVel:{logs['vel_lin']:.2f} AVel:{logs['vel_ang']:.2f} Frc:{logs['ferr']:.3f}] | "
               f"MeanPos: [{mean_x:+.2f}, {mean_z:+.2f}]\n"
               f"    -> Phys: [Hum:{raw_hum_energy:.0f} | ThVel:{thorax_mag:.2f} rad/s]")
     
