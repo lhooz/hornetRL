@@ -258,7 +258,7 @@ class FlyEnv:
                 
                 # 3. Velocity Saturation: Safety clamp to prevent physics explosion
                 # Limits: Linear (20 m/s), Angular (200 rad/s)
-                v_limits = jnp.array([20.0, 20.0, 50.0, 50.0])
+                v_limits = jnp.array([20.0, 20.0, 200.0, 200.0])
                 v_current = r_next_v[4:]
                 v_clamped = jnp.clip(v_current, -v_limits, v_limits)
                 

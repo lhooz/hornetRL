@@ -40,14 +40,14 @@ class Config:
     
     # Normalization Scale: Maps physics units to Neural Network input range
     OBS_SCALE = jnp.array([
-        0.45,   # x
-        0.45,   # z
+        0.1,   # x
+        0.1,   # z
         3.14,   # theta
         1.50,   # phi
         5.00,   # vx
         5.00,   # vz
-        50.0,   # w_theta
-        50.0    # w_phi
+        150.0,   # w_theta
+        150.0    # w_phi
     ])
 
     # --- Simulation Settings ---

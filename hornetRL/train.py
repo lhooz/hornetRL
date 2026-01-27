@@ -87,14 +87,14 @@ class Config:
     # Normalization constants to map raw physics states to Neural Network friendly ranges [-1, 1].
     # Indices: [x, z, theta, phi, vx, vz, w_theta, w_phi]
     OBS_SCALE = jnp.array([
-        0.45,   # x: Arena boundary
-        0.45,   # z: Arena boundary
+        0.1,   # x: focus on centre
+        0.1,   # z: focus on centre
         3.14,   # theta: Full rotation normalization
         1.50,   # phi: Abdomen joint limit
         5.00,   # vx: Max expected flight velocity
         5.00,   # vz: Max expected flight velocity
-        50.0,   # w_theta: High-frequency body oscillation scale
-        50.0    # w_phi: High-frequency abdomen oscillation scale
+        150.0,   # w_theta: High-frequency body oscillation scale
+        150.0    # w_phi: High-frequency abdomen oscillation scale
     ])
 
 # ==============================================================================
@@ -508,7 +508,7 @@ def train():
         # We negate it so that "Small Error" becomes "High Score" (e.g. -0.01 > -5.0)
         current_score = -1.0 * (logs['pos_per_agent'] * 100.0)
 
-        new_running = 0.95 * pbt_state.running_reward + 0.05 * current_score
+        new_running = 0.8 * pbt_state.running_reward + 0.2 * current_score
         new_pbt_state = pbt_state._replace(running_reward=new_running)
 
         return new_params, new_opt, loss, logs, next_state, new_pbt_state, key_next
@@ -603,6 +603,11 @@ def train():
         if i % Config.RESET_INTERVAL == 0 and i > 0:
             print(f"--> PBT EVOLUTION (Step {i})")
             rng, k_pbt = jax.random.split(rng)
+
+            # Print best weights with Score in CM
+            best_idx = jnp.argmax(pbt_state.running_reward)
+            best_score = pbt_state.running_reward[best_idx]
+            print(f"    Best Score: {best_score:.2f} cm | Weights: {pbt_state.weights[best_idx]}")
         
             # Run the logic from the standalone script
             params, opt_state, pbt_state = pbt_evolve(
@@ -614,11 +619,6 @@ def train():
                 truncate_fraction=Config.PBT_TRUNCATE_FRACTION
             )
         
-            # Print best weights with Score in CM
-            best_idx = jnp.argmax(pbt_state.running_reward)
-            best_score = pbt_state.running_reward[best_idx]
-            print(f"    Best Score: {best_score:.2f} cm | Weights: {pbt_state.weights[best_idx]}")
-
             # 2. Force Environment Reset
             curr_state = env.reset(rng, Config.BATCH_SIZE)
 
