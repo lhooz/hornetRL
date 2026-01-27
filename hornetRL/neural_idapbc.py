@@ -20,13 +20,13 @@ class ScaleConfig:
         DAMPING_SCALE: Dynamic range for the learnable damping injection.
     """
     # Control Authority: [Fx (N), Fz (N), Tau_theta (Nm), Tau_phi (Nm)]
-    CONTROL_SCALE = jnp.array([0.05, 0.05, 1.5e-4, 2.0e-4])
+    CONTROL_SCALE = jnp.array([0.5, 0.5, 1.5e-3, 2.0e-3])
 
     # Damping Baseline: Low drag for efficient flight
     DAMPING_BASE = jnp.array([0.005, 0.005, 5.0e-5, 5.0e-5])
 
     # Damping Range: Allows strong braking (linear) and precise attitude control (angular)
-    DAMPING_SCALE = jnp.array([0.05, 0.05, 1.5e-4, 2.0e-4])
+    DAMPING_SCALE = jnp.array([0.5, 0.5, 1.5e-3, 2.0e-3])
 
 # ==============================================================================
 # 1. INPUT CONVEX NEURAL NETWORK (ICNN)
