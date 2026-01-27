@@ -84,11 +84,15 @@ class FlyRobotPhysics:
         # Negative Phi = Curling UP (Towards Wings) -> Small Range (~35 deg)
         self.limit_up = -0.6
         
-        # Wall Stiffness: Hard stop (~20x stiffer than tendon)
-        self.k_wall = 0.002
+        # Wall Stiffness: Hard stop (~100x stiffer than tendon)
+        self.k_wall = 0.01
         
         # Wall Damping: Dissipates energy on impact to prevent bouncing
-        self.b_wall = 2e-3
+        self.b_wall = 5e-3
+
+        # wall_sharpness: Controls how smoothly the wall engages.
+        # 50.0 creates a transition zone of ~2 degrees.
+        self.wall_sharpness = 50.0
 
     def compute_props(self, p: PhysParams) -> RobotProps:
         """
@@ -223,13 +227,20 @@ class FlyRobotPhysics:
         pe_spring = 0.5 * props.k_hinge * (ph - props.phi_equilibrium)**2
 
         # --- Wall Constraints (Soft Limits) ---
-        # 1. Violation Down (Stinging too far)
-        viol_down = jnp.maximum(0.0, ph - self.limit_down)
+        # --- Soft Wall Potential (Smooth ReLU / Softplus) ---
+        # 1. Distance past limits
+        diff_down = ph - self.limit_down
+        diff_up   = self.limit_up - ph
         
-        # 2. Violation Up (Hitting wings)
-        viol_up = jnp.maximum(0.0, self.limit_up - ph)
+        # 2. Smooth "Rectification"
+        beta = self.wall_sharpness
         
-        # Total Wall Energy
+        # jax.nn.softplus(x) = log(1 + exp(x)). 
+        # We scale by beta to make the transition sharp, then divide to normalize scale.
+        viol_down = jax.nn.softplus(beta * diff_down) / beta
+        viol_up   = jax.nn.softplus(beta * diff_up) / beta
+        
+        # 3. Total Wall Energy
         pe_wall = 0.5 * self.k_wall * (viol_down**2 + viol_up**2)
 
         return pe1 + pe2 + pe_spring + pe_wall
@@ -259,12 +270,20 @@ class FlyRobotPhysics:
         q = state[:4]
         phi = q[3]
         
-        is_past_down = phi > self.limit_down
-        is_past_up   = phi < self.limit_up
-        is_at_limit  = is_past_down | is_past_up
+        # Calculate penetration "score"
+        pen_down = phi - self.limit_down
+        pen_up   = self.limit_up - phi
         
-        # Effective hinge friction (Standard + Impact Damping)
-        b_hinge_eff = props.b_hinge + jnp.where(is_at_limit, self.b_wall, 0.0)
+        # Sigmoid Activation (0.0 -> 1.0)
+        # Ramps up damping smoothly as we approach/enter the wall.
+        act_down = jax.nn.sigmoid(self.wall_sharpness * pen_down)
+        act_up   = jax.nn.sigmoid(self.wall_sharpness * pen_up)
+        
+        # Total wall damping coefficient
+        b_wall_eff = self.b_wall * (act_down + act_up)
+
+        # Total hinge friction (Base + Wall Impact)
+        b_hinge_total = props.b_hinge + b_wall_eff
 
         # Damping Matrix R
         # Diag: [0...0, D_linear, D_linear, D_angular, D_hinge]
@@ -273,7 +292,7 @@ class FlyRobotPhysics:
             self.damping_linear, 
             self.damping_linear, 
             self.damping_angular, 
-            b_hinge_eff          
+            b_hinge_total          
         ], dtype=jnp.float32))
         
         x_dot = (J - R) @ dH + u_vec
