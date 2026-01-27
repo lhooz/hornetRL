@@ -37,18 +37,6 @@ class Config:
     
     # Target State: [x, z, theta, phi, vx, vz, w_theta, w_phi]
     TARGET_STATE = jnp.array([0.0, 0.0, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0])
-    
-    # Normalization Scale: Maps physics units to Neural Network input range
-    OBS_SCALE = jnp.array([
-        0.1,   # x
-        0.1,   # z
-        3.14,   # theta
-        1.50,   # phi
-        5.00,   # vx
-        5.00,   # vz
-        150.0,   # w_theta
-        150.0    # w_phi
-    ])
 
     # --- Simulation Settings ---
     DT = 3e-5             
@@ -73,6 +61,10 @@ class Config:
     # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
     PERTURB_TORQUE = -0.002
 
+def symlog(x):
+    """Symmetric Log scaling."""
+    return jnp.sign(x) * jnp.log1p(jnp.abs(x))
+
 # ==============================================================================
 # 2. MODEL DEFINITION
 # ==============================================================================
@@ -83,14 +75,17 @@ def actor_critic_fn(robot_state):
     Only the Actor (Policy) is used during inference, but the full structure 
     is required to correctly load weights from the checkpoint.
     """
-    # 1. Actor (Brain + Muscles)
+    # 1. Prepare Target in SymLog Space
+    target_sym = symlog(Config.TARGET_STATE)
+
+    # 2. Actor (Brain + Muscles)
     mods, forces = policy_network_icnn(
         robot_state, 
-        target_state=Config.TARGET_STATE,
-        obs_scale=Config.OBS_SCALE
+        target_state=target_sym,
+        obs_scale=None
     )
     
-    # 2. Critic (Exact match to training to preserve parameter structure)
+    # 3. Critic (Exact match to training to preserve parameter structure)
     value = hk.Sequential([
         hk.Linear(128), jax.nn.tanh,
         hk.Linear(128), jax.nn.tanh,
@@ -283,7 +278,7 @@ def run_simulation(params):
         # 1. Prepare Observation
         wrapped_theta = jnp.mod(r_state[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
         obs_input = r_state.at[:, 2].set(wrapped_theta)
-        scaled_input = obs_input / Config.OBS_SCALE # Explicitly divide the whole vector
+        scaled_input = symlog(obs_input)
         
         # 2. Run Policy
         mods, _, _ = ac_model.apply(curr_params, scaled_input)

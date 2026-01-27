@@ -92,14 +92,14 @@ class NeuralIDAPBC_ICNN(hk.Module):
         
         raw_target_q = target_state[:4]
         
+        # If obs_scale is None, we assume the target is ALREADY scaled (e.g. SymLog).
         if obs_scale is None:
-            print("WARNING: No obs_scale passed to NeuralIDAPBC. Assuming 1.0 (Raw Units).")
-            scale_q = jnp.ones(4)
+            # No division needed. Trust the input.
+            self.target_q = raw_target_q 
         else:
+            # Linear scaling mode (Old way)
             scale_q = obs_scale[:4]
-
-        # Store the normalized target for consistent error calculation
-        self.target_q = raw_target_q / scale_q
+            self.target_q = raw_target_q / scale_q
 
         self.icnn = ICNN()
         

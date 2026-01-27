@@ -68,9 +68,15 @@ class Config:
     CURRICULUM_RATIO = 0.5
     
     # --- PBT Hyperparameters ---
-    # Initial Reward Weights: [Pos, Th_Ang, Ab_Ang, Lin_Vel, Ang_Vel, Eff]
-    # These act as the "center" of the search distribution.
-    PBT_BASE_WEIGHTS = jnp.array([10000.0, 10.0, 5.0, 0.1, 0.00001, 0.1])
+    # Initial Reward Weights, act as the "center" of the search distribution.
+    PBT_BASE_WEIGHTS = jnp.array([
+        10.0,    # Pos (The "Pot of Gold" max value)
+        2.0,     # Th_Ang (Orientation penalty)
+        1.0,     # Ab_Ang (Abdomen stability)
+        0.1,     # Lin_Vel (Drift damping)
+        0.001,    # Ang_Vel (Vibration damping)
+        0.1      # Eff (Force efficiency)
+    ])
     
     # Evolution Dynamics
     PBT_PERTURB_FACTOR = 1.2       # Mutation strength (+/- 20%)
@@ -83,19 +89,14 @@ class Config:
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
 
-    # --- Observation Scaling ---
-    # Normalization constants to map raw physics states to Neural Network friendly ranges [-1, 1].
-    # Indices: [x, z, theta, phi, vx, vz, w_theta, w_phi]
-    OBS_SCALE = jnp.array([
-        0.1,   # x: focus on centre
-        0.1,   # z: focus on centre
-        3.14,   # theta: Full rotation normalization
-        1.50,   # phi: Abdomen joint limit
-        5.00,   # vx: Max expected flight velocity
-        5.00,   # vz: Max expected flight velocity
-        150.0,   # w_theta: High-frequency body oscillation scale
-        150.0    # w_phi: High-frequency abdomen oscillation scale
-    ])
+# --- Observation Scaling SYMLOG---
+def symlog(x):
+    """
+    Symmetric Log scaling.
+    Compresses large magnitudes while preserving small differences near zero.
+    Range: Real Numbers -> [-inf, inf] (but mostly compressed to [-10, 10])
+    """
+    return jnp.sign(x) * jnp.log1p(jnp.abs(x))
 
 # ==============================================================================
 # 2. MODEL DEFINITION
@@ -105,19 +106,21 @@ def actor_critic_fn(robot_state):
     Defines the Actor-Critic architecture.
     
     Actor: Input Convex Neural Network (ICNN) wrapped in IDA-PBC logic.
-           Injects OBS_SCALE to ensure target and current states share the same coordinate space.
     Critic: Standard MLP Value Function.
     """
     
+    # 1. Prepare Target in SymLog Space
+    target_sym = symlog(Config.TARGET_STATE)
 
-    # 1. Actor (Brain + Muscles)
+    # 2. Actor (Brain + Muscles)
+    # Pass None to obs_scale because we already handled scaling via SymLog
     mods, forces = policy_network_icnn(
         robot_state, 
-        target_state=Config.TARGET_STATE,
-        obs_scale=Config.OBS_SCALE
+        target_state=target_sym,
+        obs_scale=None 
     )
     
-    # 2. Critic (Value Function estimation)
+    # 3. Critic
     value = hk.Sequential([
         hk.Linear(128), jax.nn.tanh,
         hk.Linear(128), jax.nn.tanh,
@@ -398,7 +401,7 @@ def train():
             obs_robot = curr_robot.at[:, 2].set(wrapped_theta)
 
             # 2. Normalize Observation
-            scaled_obs = obs_robot / Config.OBS_SCALE
+            scaled_obs = symlog(obs_robot)
             
             # --- Noise Injection (Sensor Model) ---
             # Simulates sensor noise to promote robust control policies.
@@ -451,7 +454,7 @@ def train():
 
         # Wrap and Scale terminal state (Raw -> Obs)
         f_wrapped_th = jnp.mod(final_robot[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
-        final_obs = final_robot.at[:, 2].set(f_wrapped_th) / Config.OBS_SCALE
+        final_obs = symlog(final_robot.at[:, 2].set(f_wrapped_th))
 
         _, _, final_val_actor = jax.vmap(ac_model.apply)(params, final_obs)
         final_val_actor = jnp.squeeze(final_val_actor)
@@ -465,7 +468,7 @@ def train():
         # Wrap and Scale start state (Raw -> Obs)
         start_robot = start_state[0]
         s_wrapped_th = jnp.mod(start_robot[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
-        start_obs = start_robot.at[:, 2].set(s_wrapped_th) / Config.OBS_SCALE
+        start_obs = symlog(start_robot.at[:, 2].set(s_wrapped_th))
 
         _, _, start_val = jax.vmap(ac_model.apply)(params, start_obs)
         start_val = jnp.squeeze(start_val)
@@ -576,7 +579,7 @@ def train():
         # Diagnostic: Check Brain's perspective
         wrapped_theta = jnp.mod(sample_robot[2] + jnp.pi, 2 * jnp.pi) - jnp.pi
         obs_sample = sample_robot.at[2].set(wrapped_theta)
-        scaled_sample = obs_sample / Config.OBS_SCALE
+        scaled_sample = symlog(obs_sample)
 
         params_sample = jax.tree.map(lambda x: x[0], params)
         
@@ -652,7 +655,7 @@ def vis_step_fn(env, curr_state, curr_params, step_idx):
     # 1. Prepare Observation (Same logic as before)
     wrapped_th = jnp.mod(r_st[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
     obs_v = r_st.at[:, 2].set(wrapped_th)
-    scaled_obs = obs_v / Config.OBS_SCALE
+    scaled_obs = symlog(obs_v)
     
     # 2. Policy Inference (Uses global ac_model)
     mods, _, _ = ac_model.apply(curr_params, scaled_obs)

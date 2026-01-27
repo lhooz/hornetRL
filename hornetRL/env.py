@@ -299,59 +299,72 @@ class FlyEnv:
     def get_reward_metrics(self, robot_state, u_forces, reward_weights):
         """
         Calculates the scalar reward and detailed cost breakdown.
-        Prioritizes position holding while allowing necessary body inclination for movement.
+        UPDATED: Uses 'Honeypot' Precision Reward + 'Soft Barrier' Safety Penalty.
         """
         err = robot_state - self.target
         
         # Wrap Thorax Angle error to [-pi, pi]
         err_theta = jnp.mod(err[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
 
-        # 1. Squared Errors
-        loss_pos = jnp.sqrt(jnp.sum(err[:, :2]**2, axis=1) + 1e-6)   
-        loss_ang_thorax = err_theta**2              
-        loss_ang_abdomen = err[:, 3]**2
-        loss_lin_vel = jnp.sum(err[:, 4:6]**2, axis=1)
-        loss_ang_vel = jnp.sum(err[:, 6:8]**2, axis=1)
-        loss_eff = jnp.sum(u_forces**2, axis=1)        
-        
-        # 2. Weighted Cost Function (Agility Tuned)
-        # --- DYNAMIC COST CALCULATION ---
-        # Extract weights for the batch (Shape: Batch x 6)
+        # --- 1. Position Metrics ---
+        # Calculate squared distance for the precision kernel
+        dist_sq = jnp.sum(err[:, :2]**2, axis=1)
+        dist = jnp.sqrt(dist_sq + 1e-6)
+
+        # --- 2. Precision Reward (The "Magnet") ---
+        # Replaces: w_pos * loss_pos (Cost) & Proximity Bonuses
+        # Logic: 
+        #   - At dist=0.0: Reward is Max (w_pos)
+        #   - As dist grows: Reward decays smoothly to 0
+        #   - Gradient is steepest near 0 (High Sensitivity)
         w_pos = reward_weights[:, 0]
+        precision_kernel = 1.0 / (1.0 + 10.0 * dist_sq)
+        rew_precision = w_pos * precision_kernel
+
+        # --- 3. Safety Penalty (The "Electric Fence") ---
+        # Replaces: out_of_bounds_cost (jnp.where)
+        # Problem with old 'jnp.where': Gradient was 0.
+        # New 'ReLU': Creates a gradient that pushes the fly back as soon as it crosses 0.20m.
+        wall_limit = 0.20
+        violation = jax.nn.relu(dist - wall_limit)
+        
+        # Quadratic penalty: The further out, the harder the push back.
+        # Multiplied by 1000.0 to ensure it overrides other incentives.
+        rew_safety = -1000.0 * (violation ** 2)
+
+        # --- 4. Other Dynamic Costs (Negative) ---
+        # We assume these remaining weights are for Costs (penalties)
         w_th  = reward_weights[:, 1]
         w_ab  = reward_weights[:, 2]
         w_lv  = reward_weights[:, 3]
         w_av  = reward_weights[:, 4]
         w_eff = reward_weights[:, 5]
 
-        cost = (w_pos * loss_pos + 
-                w_th  * loss_ang_thorax + 
-                w_ab  * loss_ang_abdomen + 
-                w_lv  * loss_lin_vel + 
-                w_av  * loss_ang_vel + 
-                w_eff * loss_eff)
-        
-        # 3. Soft Fence Constraint
-        dist_from_center = loss_pos
-        out_of_bounds_cost = jnp.where(dist_from_center > 0.20, 100.0, 0.0)
-        cost = cost + out_of_bounds_cost 
+        loss_ang_thorax = err_theta**2
+        loss_ang_abdomen = err[:, 3]**2
+        loss_lin_vel = jnp.sum(err[:, 4:6]**2, axis=1)
+        loss_ang_vel = jnp.sum(err[:, 6:8]**2, axis=1)
+        loss_eff = jnp.sum(u_forces**2, axis=1)
 
-        # 4. Proximity Bonuses
-        is_close = loss_pos < 0.05 # ~5cm
-        bonus = is_close * 5.0
-        is_close2 = loss_pos < 0.02 # ~2cm
-        bonus2 = is_close2 * 25.0
+        cost_others = (
+            w_th  * loss_ang_thorax + 
+            w_ab  * loss_ang_abdomen + 
+            w_lv  * loss_lin_vel + 
+            w_av  * loss_ang_vel + 
+            w_eff * loss_eff
+        )
 
-        # 5. Survival Bonus
-        # Constant reward accumulated every timestep the agent remains valid.
-        alive_reward = 1.0 
+        # --- 5. Total Reward ---
+        # FORMULA: Alive + Precision(Reward) + Safety(Penalty) - OtherCosts(Penalty)
+        alive_reward = 1.0
         
-        raw_reward = alive_reward + bonus + bonus2 - cost
+        raw_reward = alive_reward + rew_precision + rew_safety - cost_others
+        
         scaled_reward = raw_reward * 0.02 
         
         metrics = {
             'rew': raw_reward,
-            'pos': loss_pos,
+            'pos': dist,           # We log actual distance for PBT tracking
             'ang_th': loss_ang_thorax, 
             'ang_ab': loss_ang_abdomen,
             'vel_lin': loss_lin_vel,  
