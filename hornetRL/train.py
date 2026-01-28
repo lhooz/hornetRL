@@ -21,7 +21,7 @@ from functools import partial
 from .fluid_surrogate import JaxSurrogateEngine
 from .fly_system import FlappingFlySystem, PhysParams
 from .neural_cpg import OscillatorState, step_oscillator, get_wing_kinematics
-from .neural_idapbc import policy_network_icnn, unpack_action
+from .neural_idapbc import policy_network_icnn, unpack_action, ScaleConfig
 from .pbt_manager import init_pbt_state, pbt_evolve
 from .env import FlyEnv
 
@@ -90,6 +90,8 @@ class Config:
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
 
+    FORCE_NORMALIZER = ScaleConfig.FORCE_NORMALIZER
+
 # --- Observation Scaling SYMLOG---
 def symlog(x):
     """
@@ -102,7 +104,7 @@ def symlog(x):
 # ==============================================================================
 # 2. MODEL DEFINITION
 # ==============================================================================
-def actor_critic_fn(robot_state):
+def actor_critic_fn(robot_state, force_noise=None):
     """
     Defines the Actor-Critic architecture.
     
@@ -118,6 +120,7 @@ def actor_critic_fn(robot_state):
     mods, forces = policy_network_icnn(
         robot_state, 
         target_state=target_sym,
+        force_noise=force_noise
     )
     
     # 3. Critic
@@ -409,12 +412,24 @@ def train():
             obs_noise = jax.random.normal(step_key, shape=scaled_obs.shape) * noise_sigma
             noisy_obs = scaled_obs + obs_noise
             
+            # --- GENERATE ACTION NOISE ---
+            # 1. Split key
+            key_noise, key_step = jax.random.split(step_key)
+            
+            # 2. Define Noise Scale (e.g., 20% of max force)
+            # Use ScaleConfig.FORCE_NORMALIZER so the noise is in Newtons
+            noise_sigma = Config.FORCE_NORMALIZER * 0.2 
+            
+            # 3. Sample Gaussian Noise
+            # Shape should match u_forces: [Batch, 4]
+            force_noise = jax.random.normal(key_noise, shape=(Config.BATCH_SIZE, 4)) * noise_sigma
+
             # 3. Policy Inference (Noisy Input -> Smooth Action)
             # This allows Agent 1 to use Brain 1 on Obs 1, Agent 2 on Brain 2, etc.
             batched_network = jax.vmap(ac_model.apply)
             
             # Apply: Brain[i] sees Observation[i]
-            mods, u_brain, _ = batched_network(params, noisy_obs)
+            mods, u_brain, _ = batched_network(params, noisy_obs, force_noise)
             
             # 4. Environment Step (Physics uses raw actions)
             next_full, f_actual, _, _, _ = env.step_batch(curr_full, mods, step_idx=p_idx)

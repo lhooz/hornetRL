@@ -20,13 +20,13 @@ class ScaleConfig:
         DAMPING_SCALE: Dynamic range for the learnable damping injection.
     """
     # Control Authority: [Fx (N), Fz (N), Tau_theta (Nm), Tau_phi (Nm)]
-    CONTROL_SCALE = jnp.array([0.3, 0.3, 2e-3, 2.0e-4])
+    CONTROL_SCALE = jnp.array([0.05, 0.05, 5e-4, 2.0e-4])
 
     # Damping Baseline: Low drag for efficient flight
     DAMPING_BASE = jnp.array([0.002, 0.002, 1.0e-5, 1.0e-5])
 
     # Damping Range: Allows strong braking (linear) and precise attitude control (angular)
-    DAMPING_SCALE = jnp.array([0.3, 0.3, 2e-3, 2.0e-4])
+    DAMPING_SCALE = jnp.array([0.05, 0.05, 5e-4, 2.0e-4])
 
     # Define Scale (Sensitivity Multipliers)
     OBS_SCALE = jnp.array([50.0, 50.0, 1.0, 1.0, 1.0, 1.0, 0.01, 0.1])
@@ -130,7 +130,7 @@ class NeuralIDAPBC_ICNN(hk.Module):
 # ==============================================================================
 # 3. FULL POLICY WRAPPER
 # ==============================================================================
-def policy_network_icnn(x, target_state=None):
+def policy_network_icnn(x, target_state=None, force_noise=None):
     """
     Full Policy Pipeline: Brain -> Muscles.
     
@@ -155,10 +155,17 @@ def policy_network_icnn(x, target_state=None):
     # 1. THE BRAIN (Compute Generalized Forces)
     brain = NeuralIDAPBC_ICNN(target_state)
     u_forces = brain(x_in)
+
+    # 3. Inject Noise
+    if force_noise is not None:
+        u_forces_newtons = u_forces_newtons + force_noise
+
+    # 4. Normalize using CONTROL_SCALE
+    u_forces_norm = u_forces_newtons / ScaleConfig.CONTROL_SCALE
     
     # 2. THE MUSCLES (Map Forces -> Kinematics)
     muscles = BiologicalKinematicMap()
-    mod_tuple = muscles(u_forces) 
+    mod_tuple = muscles(u_forces_norm) 
     
     # Stack outputs: [d_freq, d_amp, d_bias, pitch_off, dev_amp, abd_tau, aoa_dn, aoa_up, dev_phase]
     modulations_vector = jnp.stack(mod_tuple, axis=-1)
