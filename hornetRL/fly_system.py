@@ -88,7 +88,7 @@ class FlyRobotPhysics:
         self.k_wall = 0.01
         
         # Wall Damping: Dissipates energy on impact to prevent bouncing
-        self.b_wall = 1e-3
+        self.b_wall = 5e-4
 
         # wall_sharpness: Controls how smoothly the wall engages.
         # 50.0 creates a transition zone of ~2 degrees.
