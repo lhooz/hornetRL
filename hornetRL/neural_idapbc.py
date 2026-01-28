@@ -28,6 +28,9 @@ class ScaleConfig:
     # Damping Range: Allows strong braking (linear) and precise attitude control (angular)
     DAMPING_SCALE = jnp.array([0.3, 0.3, 2e-3, 2.0e-4])
 
+    # Define Scale (Sensitivity Multipliers)
+    OBS_SCALE = jnp.array([50.0, 50.0, 1.0, 1.0, 1.0, 1.0, 0.01, 0.1])
+
 # ==============================================================================
 # 1. INPUT CONVEX NEURAL NETWORK (ICNN)
 # ==============================================================================
@@ -80,7 +83,7 @@ class NeuralIDAPBC_ICNN(hk.Module):
     to drive the state error to zero. It computes control forces as:
     u = -grad(V_shaped(error)) - R(x) * velocity
     """
-    def __init__(self, target_state, obs_scale):
+    def __init__(self, target_state):
         super().__init__()
         
         # Normalization Logic:
@@ -90,20 +93,9 @@ class NeuralIDAPBC_ICNN(hk.Module):
         # Indices 0-3 correspond to positions/angles: [x, z, theta, phi]
         
         raw_target_q = target_state[:4]
-        
-        # If obs_scale is None, we assume the target is ALREADY scaled (e.g. SymLog).
-        if obs_scale is None:
-            # No division needed. Trust the input.
-            self.target_q = raw_target_q 
-        else:
-            # Linear scaling mode (Old way)
-            scale_q = obs_scale[:4]
-            self.target_q = raw_target_q / scale_q
+        self.target_q = raw_target_q * ScaleConfig.OBS_SCALE[:4]
 
         self.icnn = ICNN()
-        
-        # Layer Norm for input stability
-        self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         
     def __call__(self, x):
 
@@ -138,7 +130,7 @@ class NeuralIDAPBC_ICNN(hk.Module):
 # ==============================================================================
 # 3. FULL POLICY WRAPPER
 # ==============================================================================
-def policy_network_icnn(x, target_state=None, obs_scale=None):
+def policy_network_icnn(x, target_state=None):
     """
     Full Policy Pipeline: Brain -> Muscles.
     
@@ -157,9 +149,12 @@ def policy_network_icnn(x, target_state=None, obs_scale=None):
     if target_state is None:
         target_state = jnp.array([0.0, 0.0, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0])
     
+    # Apply "Volume Knobs" (Sensitivity Gains)
+    x_in = x * ScaleConfig.OBS_SCALE
+
     # 1. THE BRAIN (Compute Generalized Forces)
-    brain = NeuralIDAPBC_ICNN(target_state, obs_scale)
-    u_forces = brain(x) 
+    brain = NeuralIDAPBC_ICNN(target_state)
+    u_forces = brain(x_in)
     
     # 2. THE MUSCLES (Map Forces -> Kinematics)
     muscles = BiologicalKinematicMap()

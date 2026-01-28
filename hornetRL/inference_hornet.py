@@ -82,7 +82,6 @@ def actor_critic_fn(robot_state):
     mods, forces = policy_network_icnn(
         robot_state, 
         target_state=target_sym,
-        obs_scale=None
     )
     
     # 3. Critic (Exact match to training to preserve parameter structure)
