@@ -61,7 +61,7 @@ class Config:
     LR_ACTOR = 5e-4         # Learning Rate
     MAX_GRAD_NORM = 1.0     # Gradient Clipping threshold
     GAMMA = 0.99            # Discount Factor
-    OBS_NOISE_SIGMA = 0.05  # Observation noise sigma
+    OBS_NOISE_SIGMA = 0.01  # Observation noise sigma
     TOTAL_UPDATES = 100000   # Total Gradient Steps
 
     # % Nominal (Hover), % Chaos (Recovery)
