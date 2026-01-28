@@ -154,7 +154,7 @@ def policy_network_icnn(x, target_state=None, force_noise=None):
 
     # 1. THE BRAIN (Compute Generalized Forces)
     brain = NeuralIDAPBC_ICNN(target_state)
-    u_forces = brain(x_in)
+    u_forces_newtons = brain(x_in)
 
     # 3. Inject Noise
     if force_noise is not None:
@@ -170,7 +170,7 @@ def policy_network_icnn(x, target_state=None, force_noise=None):
     # Stack outputs: [d_freq, d_amp, d_bias, pitch_off, dev_amp, abd_tau, aoa_dn, aoa_up, dev_phase]
     modulations_vector = jnp.stack(mod_tuple, axis=-1)
     
-    return modulations_vector, u_forces
+    return modulations_vector, u_forces_newtons
 
 # ==============================================================================
 # 4. HELPER: UNPACK ACTION

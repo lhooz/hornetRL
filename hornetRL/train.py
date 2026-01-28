@@ -90,7 +90,7 @@ class Config:
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
 
-    FORCE_NORMALIZER = ScaleConfig.FORCE_NORMALIZER
+    FORCE_NORMALIZER = ScaleConfig.CONTROL_SCALE
 
 # --- Observation Scaling SYMLOG---
 def symlog(x):
@@ -416,9 +416,9 @@ def train():
             # 1. Split key
             key_noise, key_step = jax.random.split(step_key)
             
-            # 2. Define Noise Scale (e.g., 20% of max force)
-            # Use ScaleConfig.FORCE_NORMALIZER so the noise is in Newtons
-            noise_sigma = Config.FORCE_NORMALIZER * 0.2 
+            # 2. Define Noise Scale (e.g., 5% of max force)
+            # Use Config.FORCE_NORMALIZER so the noise is in Newtons
+            noise_sigma = Config.FORCE_NORMALIZER * 0.05
             
             # 3. Sample Gaussian Noise
             # Shape should match u_forces: [Batch, 4]
@@ -650,7 +650,7 @@ def train():
               f"Loss: {loss:.1e} (A:{logs['act_loss']:.1e} C:{logs['crit_loss']:.1e}) | "
               f"Rew: {logs['rew']:.1f}\n"
               f"    -> Errs[Pos:{logs['pos']:.2f} Th:{logs['ang_th']:.2f} Ab:{logs['ang_ab']:.2f} "
-              f"LVel:{logs['vel_lin']:.2f} AVel:{logs['vel_ang']:.2f} Frc:{logs['ferr']:.3f}] | "
+              f"LVel:{logs['vel_lin']:.2f} AVel:{logs['vel_ang']:.2f} Frc:{logs['ferr']:.4f}] | "
               f"MeanPos: [{mean_x:+.2f}, {mean_z:+.2f}]\n"
               f"    -> Phys: [Hum:{raw_hum_energy:.0f} | ThVel:{thorax_mag:.2f} rad/s]")
     
