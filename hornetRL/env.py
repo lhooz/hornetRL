@@ -356,7 +356,7 @@ class FlyEnv:
 
         # --- 5. Total Reward ---
         # FORMULA: Alive + Precision(Reward) + Safety(Penalty) - OtherCosts(Penalty)
-        alive_reward = 1.0
+        alive_reward = 0.01
         
         raw_reward = alive_reward + rew_precision + rew_safety - cost_others
         

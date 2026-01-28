@@ -416,9 +416,9 @@ def train():
             # 1. Split key
             key_noise, key_step = jax.random.split(step_key)
             
-            # 2. Define Noise Scale (e.g., 50% of max force)
+            # 2. Define Noise Scale (e.g., 25% of max force)
             # Use Config.FORCE_NORMALIZER so the noise is in Newtons
-            noise_sigma = Config.FORCE_NORMALIZER * 0.5
+            noise_sigma = Config.FORCE_NORMALIZER * 0.25
             
             # 3. Sample Gaussian Noise
             # Shape should match u_forces: [Batch, 4]
