@@ -88,11 +88,11 @@ class FlyRobotPhysics:
         self.k_wall = 0.01
         
         # Wall Damping: Dissipates energy on impact to prevent bouncing
-        self.b_wall = 5e-3
+        self.b_wall = 1e-3
 
         # wall_sharpness: Controls how smoothly the wall engages.
         # 50.0 creates a transition zone of ~2 degrees.
-        self.wall_sharpness = 50.0
+        self.wall_sharpness = 20.0
 
     def compute_props(self, p: PhysParams) -> RobotProps:
         """

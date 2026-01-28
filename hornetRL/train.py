@@ -55,7 +55,7 @@ class Config:
     HORIZON = 64            # Trajectory horizon for Back-propagation Through Time (BPTT).
                             # Duration: ~0.038s (~4.4 wingbeats), sufficient for stability convergence.
     RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
-    PBT_INTERVAL = 500      # Evolution interval (Survival of the fittest)
+    PBT_INTERVAL = 1000      # Evolution interval (Survival of the fittest)
 
     BATCH_SIZE = 32          # Number of parallel environments
     LR_ACTOR = 5e-4         # Learning Rate
