@@ -30,7 +30,7 @@ class ScaleConfig:
 
     # Define Scale (Sensitivity Multipliers)
     #                    [  x,    z,   th,  phi,  vx,  vz,w_th, w_phi]
-    OBS_SCALE = jnp.array([50.0, 50.0, 1.0, 1.0, 1.0, 1.0, 0.02, 0.1])
+    OBS_SCALE = jnp.array([50.0, 50.0, 1.0, 1.0, 1.0, 1.0, 0.01, 0.1])
 
 # ==============================================================================
 # 1. INPUT CONVEX NEURAL NETWORK (ICNN)
