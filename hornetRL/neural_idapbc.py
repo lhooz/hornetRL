@@ -29,7 +29,7 @@ class ScaleConfig:
     DAMPING_SCALE = jnp.array([0.05, 0.05, 5e-4, 2.0e-4])
 
     # Define Scale (Sensitivity Multipliers)
-    OBS_SCALE = jnp.array([50.0, 50.0, 1.0, 1.0, 1.0, 1.0, 0.01, 0.1])
+    OBS_SCALE = jnp.array([50.0, 50.0, 1.0, 1.0, 1.0, 1.0, 0.1, 0.1])
 
 # ==============================================================================
 # 1. INPUT CONVEX NEURAL NETWORK (ICNN)
