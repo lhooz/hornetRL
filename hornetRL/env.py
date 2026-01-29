@@ -53,11 +53,11 @@ class FlyEnv:
         k1_n, k2_n = jax.random.split(k1)
         
         # Position: Tight window (+/- 5cm)
-        q_pos_nom = jax.random.uniform(k1_n, (n_nominal, 2), minval=-0.05, maxval=0.05)
+        q_pos_nom = jax.random.uniform(k1_n, (n_nominal, 2), minval=-0.15, maxval=0.15)
         
         # Angle Setup:
         # 1. Pitch: Upright (~1.08 rad)
-        theta_nom = jax.random.uniform(k2_n, (n_nominal, 1), minval=-0.1, maxval=0.1)
+        theta_nom = jax.random.uniform(k2_n, (n_nominal, 1), minval=-1.3, maxval=1.3)
         theta_nom = theta_nom + 1.0
         
         # 2. Abdomen: Equilibrium (~0.3 rad) to minimize initial internal stress
@@ -71,10 +71,10 @@ class FlyEnv:
         k_theta, k_phi = jax.random.split(k2_c)
         
         # Position: Wide window (+/- 30cm)
-        q_pos_chaos = jax.random.uniform(k1_c, (n_chaos, 2), minval=-0.15, maxval=0.15)
+        q_pos_chaos = jax.random.uniform(k1_c, (n_chaos, 2), minval=-0.25, maxval=0.25)
         
         # Pitch: Increased randomization range
-        theta_chaos = jax.random.uniform(k_theta, (n_chaos, 1), minval=-0.5, maxval=0.5)
+        theta_chaos = jax.random.uniform(k_theta, (n_chaos, 1), minval=-2.5, maxval=2.5)
         theta_chaos = theta_chaos + 1.0
         
         # Abdomen: Increased randomization range; limits (-0.6 to 1.4)
@@ -356,7 +356,7 @@ class FlyEnv:
 
         # --- 5. Total Reward ---
         # FORMULA: Alive + Precision(Reward) + Safety(Penalty) - OtherCosts(Penalty)
-        alive_reward = 0.01
+        alive_reward = 0.0
         
         raw_reward = alive_reward + rew_precision + rew_safety - cost_others
         
