@@ -85,7 +85,7 @@ class Config:
 
     CKPT_DIR = "checkpoints_shac"
     VIS_DIR = "checkpoints_shac"
-    AUX_LOSS_WEIGHT = 1.0   
+    AUX_LOSS_WEIGHT = 0.1 
     VIS_INTERVAL = 200      
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
