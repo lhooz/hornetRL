@@ -80,7 +80,7 @@ class Config:
         10.0,     # Th_Ang (Orientation penalty)
         1.0,     # Ab_Ang (Abdomen stability)
         0.1,     # Lin_Vel (Drift damping)
-        0.001,     # Ang_Vel (Vibration damping)
+        0.002,     # Ang_Vel (Vibration damping)
         0.1      # Eff (Force efficiency)
     ])
     
