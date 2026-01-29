@@ -53,11 +53,11 @@ class FlyEnv:
         k1_n, k2_n = jax.random.split(k1)
         
         # Position: Tight window (+/- 5cm)
-        q_pos_nom = jax.random.uniform(k1_n, (n_nominal, 2), minval=-0.15, maxval=0.15)
+        q_pos_nom = jax.random.uniform(k1_n, (n_nominal, 2), minval=-0.05, maxval=0.05)
         
         # Angle Setup:
         # 1. Pitch: Upright (~1.08 rad)
-        theta_nom = jax.random.uniform(k2_n, (n_nominal, 1), minval=-1.3, maxval=1.3)
+        theta_nom = jax.random.uniform(k2_n, (n_nominal, 1), minval=-0.3, maxval=0.3)
         theta_nom = theta_nom + 1.0
         
         # 2. Abdomen: Equilibrium (~0.3 rad) to minimize initial internal stress
