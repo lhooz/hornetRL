@@ -131,7 +131,7 @@ class NeuralIDAPBC_ICNN(hk.Module):
 # ==============================================================================
 # 3. FULL POLICY WRAPPER
 # ==============================================================================
-def policy_network_icnn(x, target_state=None, force_noise=None):
+def policy_network_icnn(x, target_state=None, action_noise=None):
     """
     Full Policy Pipeline: Brain -> Muscles.
     
@@ -157,21 +157,27 @@ def policy_network_icnn(x, target_state=None, force_noise=None):
     brain = NeuralIDAPBC_ICNN(target_state)
     u_forces_newtons = brain(x_in)
 
-    # 3. Inject Noise
-    if force_noise is not None:
-        u_forces_newtons = u_forces_newtons + force_noise
-
-    # 4. Normalize using CONTROL_SCALE
+    # 2. Normalize using CONTROL_SCALE
     # e.g., Brain asks 50N, Scale is 0.05N -> Raw Ratio = 1000.0
     raw_ratio = u_forces_newtons / ScaleConfig.CONTROL_SCALE
     
-    # 5. Apply Soft Saturation
+    # 3. Apply Soft Saturation
     # - Low values (0.1) pass through unchanged (~0.1)
     # - High values (1000.0) get clamped smoothly to (~1.0)
     # - This protects the muscle network from seeing "1000" as an input
     u_forces_saturated = jnp.tanh(raw_ratio) 
+
+    # 4. Inject Action Noise (Post-Tanh)
+    # This simulates motor twitching. It forces exploration even if 
+    # the Brain is "panicking" (saturated at 1.0).
+    if action_noise is not None:
+        # Direct addition (Input is Ratio, Noise is Ratio)
+        u_forces_saturated = u_forces_saturated + action_noise
+        
+        # Hard Clip to ensure we never violate biological limits [-1, 1]
+        u_forces_saturated = jnp.clip(u_forces_saturated, -1.0, 1.0)
     
-    # 2. THE MUSCLES (Map Forces -> Kinematics)
+    # 5. THE MUSCLES (Map Forces -> Kinematics)
     muscles = BiologicalKinematicMap()
     mod_tuple = muscles(u_forces_saturated)
     

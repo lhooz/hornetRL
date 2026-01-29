@@ -61,7 +61,12 @@ class Config:
     LR_ACTOR = 5e-4         # Learning Rate
     MAX_GRAD_NORM = 1.0     # Gradient Clipping threshold
     GAMMA = 0.99            # Discount Factor
+
     OBS_NOISE_SIGMA = 0.01  # Observation noise sigma
+    # --- Action Space Noise (Motor Jitter) ---
+    # Standard deviation of the noise injected into the normalized muscle input [-1, 1].
+    ACTION_NOISE_SIGMA = 0.1
+
     TOTAL_UPDATES = 100000   # Total Gradient Steps
 
     # % Nominal (Hover), % Chaos (Recovery)
@@ -104,7 +109,7 @@ def symlog(x):
 # ==============================================================================
 # 2. MODEL DEFINITION
 # ==============================================================================
-def actor_critic_fn(robot_state, force_noise=None):
+def actor_critic_fn(robot_state, action_noise=None):
     """
     Defines the Actor-Critic architecture.
     
@@ -120,7 +125,7 @@ def actor_critic_fn(robot_state, force_noise=None):
     mods, forces = policy_network_icnn(
         robot_state, 
         target_state=target_sym,
-        force_noise=force_noise
+        action_noise=action_noise
     )
     
     # 3. Critic
@@ -415,21 +420,14 @@ def train():
             # --- GENERATE ACTION NOISE ---
             # 1. Split key
             key_noise, key_step = jax.random.split(step_key)
-            
-            # 2. Define Noise Scale (e.g., 25% of max force)
-            # Use Config.FORCE_NORMALIZER so the noise is in Newtons
-            noise_sigma = Config.FORCE_NORMALIZER * 0.25
-            
-            # 3. Sample Gaussian Noise
-            # Shape should match u_forces: [Batch, 4]
-            force_noise = jax.random.normal(key_noise, shape=(Config.BATCH_SIZE, 4)) * noise_sigma
 
-            # 3. Policy Inference (Noisy Input -> Smooth Action)
-            # This allows Agent 1 to use Brain 1 on Obs 1, Agent 2 on Brain 2, etc.
+            # 2. Sample Gaussian Noise (Direct Ratio)
+            # Shape: [Batch, 4]. Units: Normalized Effort (approx -1 to 1)
+            action_noise = jax.random.normal(key_noise, shape=(Config.BATCH_SIZE, 4)) * Config.ACTION_NOISE_SIGMA
+
+            # 3. Policy Inference
             batched_network = jax.vmap(ac_model.apply)
-            
-            # Apply: Brain[i] sees Observation[i]
-            mods, u_brain, _ = batched_network(params, noisy_obs, force_noise)
+            mods, u_brain, _ = batched_network(params, noisy_obs, action_noise)
             
             # 4. Environment Step (Physics uses raw actions)
             next_full, f_actual, _, _, _ = env.step_batch(curr_full, mods, step_idx=p_idx)
