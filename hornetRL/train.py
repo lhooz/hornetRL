@@ -437,11 +437,27 @@ def train():
             # 5. Reward Calculation
             rew_scaled, met = env.get_reward_metrics(curr_robot, u_brain, pbt_weights)
             
-            force_err = jnp.mean((u_brain[:, :3] - f_actual[:, :3])**2)
-            loss_t = -rew_scaled + (Config.AUX_LOSS_WEIGHT * force_err)
+            # --- SCALE Force ---
+            # 1. Calculate Raw Difference
+            raw_diff = u_brain[:, :3] - f_actual[:, :3]
+            
+            # 2. Normalize by the Control Scale (e.g. 0.05)
+            # This turns "0.005 Newtons" into "0.1" (10% Error)
+            norm_diff = raw_diff / Config.FORCE_NORMALIZER[:3]
+            
+            # 3. Square the Normalized Difference
+            # (0.1)^2 = 0.01. With Weight=1.0, this is still small.
+            # You might want to increase AUX_LOSS_WEIGHT to 10.0 or 100.0 in Config.
+            force_err_norm = jnp.mean(norm_diff**2)
+            
+            # 4. Apply Weight
+            loss_t = -rew_scaled + (Config.AUX_LOSS_WEIGHT * force_err_norm)
+            
+            # 5. Log the RAW error (Newtons) for readability
+            force_err_raw = jnp.mean(raw_diff**2)
             
             step_metrics = (
-                loss_t, rew_scaled, force_err, 
+                loss_t, rew_scaled, force_err_raw, 
                 met['rew'], met['pos'], 
                 met['ang_th'], met['ang_ab'], 
                 met['vel_lin'], met['vel_ang']
