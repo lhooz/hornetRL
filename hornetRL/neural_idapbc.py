@@ -162,11 +162,18 @@ def policy_network_icnn(x, target_state=None, force_noise=None):
         u_forces_newtons = u_forces_newtons + force_noise
 
     # 4. Normalize using CONTROL_SCALE
-    u_forces_norm = u_forces_newtons / ScaleConfig.CONTROL_SCALE
+    # e.g., Brain asks 50N, Scale is 0.05N -> Raw Ratio = 1000.0
+    raw_ratio = u_forces_newtons / ScaleConfig.CONTROL_SCALE
+    
+    # 5. Apply Soft Saturation
+    # - Low values (0.1) pass through unchanged (~0.1)
+    # - High values (1000.0) get clamped smoothly to (~1.0)
+    # - This protects the muscle network from seeing "1000" as an input
+    u_forces_saturated = jnp.tanh(raw_ratio) 
     
     # 2. THE MUSCLES (Map Forces -> Kinematics)
     muscles = BiologicalKinematicMap()
-    mod_tuple = muscles(u_forces_norm) 
+    mod_tuple = muscles(u_forces_saturated)
     
     # Stack outputs: [d_freq, d_amp, d_bias, pitch_off, dev_amp, abd_tau, aoa_dn, aoa_up, dev_phase]
     modulations_vector = jnp.stack(mod_tuple, axis=-1)
