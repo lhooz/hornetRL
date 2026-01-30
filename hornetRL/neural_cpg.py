@@ -71,8 +71,8 @@ class OscillatorState(NamedTuple):
             pitch_off=jnp.float32(0.0),
             dev_amp=jnp.float32(0.001),
             dev_phase=jnp.float32(0.0), 
-            aoa_dn=jnp.float32(0.8),
-            aoa_up=jnp.float32(0.8)
+            aoa_dn=jnp.float32(0.75),
+            aoa_up=jnp.float32(0.75)
         )
 
 # =============================================================================
@@ -123,10 +123,10 @@ class BiologicalKinematicMap(hk.Module):
         abd_torque = raw[..., 5] * 2e-4
         
         # 7. Angle of Attack (Downstroke)
-        aoa_down = jnp.clip(0.8 + raw[..., 6] * 0.8, 0.0, 1.6)
+        aoa_down = jnp.clip(0.75 + raw[..., 6] * 0.75, 0.0, 1.5)
         
         # 8. Angle of Attack (Upstroke)
-        aoa_up = jnp.clip(0.8 + raw[..., 7] * 0.8, 0.0, 1.6)
+        aoa_up = jnp.clip(0.75 + raw[..., 7] * 0.75, 0.0, 1.5)
         
         # 9. Deviation Phase Offset
         # Shifts the figure-8 timing, effectively tilting the deviation plane.

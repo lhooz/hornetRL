@@ -71,10 +71,10 @@ class FlyEnv:
         k_theta, k_phi = jax.random.split(k2_c)
         
         # Position: Wide window (+/- 30cm)
-        q_pos_chaos = jax.random.uniform(k1_c, (n_chaos, 2), minval=-0.25, maxval=0.25)
+        q_pos_chaos = jax.random.uniform(k1_c, (n_chaos, 2), minval=-0.15, maxval=0.15)
         
         # Pitch: Increased randomization range
-        theta_chaos = jax.random.uniform(k_theta, (n_chaos, 1), minval=-2.5, maxval=2.5)
+        theta_chaos = jax.random.uniform(k_theta, (n_chaos, 1), minval=-1.5, maxval=1.5)
         theta_chaos = theta_chaos + 1.0
         
         # Abdomen: Increased randomization range; limits (-0.6 to 1.4)
