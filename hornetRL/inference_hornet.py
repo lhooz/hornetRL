@@ -43,7 +43,7 @@ class Config:
     FPS = 60             
     DPI = 100            
     
-    VIZ_STEP_SKIP = 70
+    VIZ_STEP_SKIP = 40
     TRACE_HIST_LEN = 15
     N_SHADOW_WINGS = 7 
     
@@ -55,7 +55,7 @@ class Config:
     PERTURBATION = True  
     PERTURB_TIME = 0.02  
     PERTURB_FORCE = jnp.array([1.0, -1.4]) 
-    PERTURB_TORQUE = -0.003
+    PERTURB_TORQUE = -0.002
 
 def symlog(x):
     return jnp.sign(x) * jnp.log1p(jnp.abs(x))
@@ -374,25 +374,30 @@ def generate_gif(data, env):
     ax.set_facecolor('white')
     ax.grid(True, color='#e0e0e0', linestyle='-', linewidth=1.0)
     
-    traj_line, = ax.plot([], [], color='#808080', linestyle='-', linewidth=1.2, alpha=0.6)
-    wing_traj_line, = ax.plot([], [], color='#404040', linestyle='-', linewidth=1.0, alpha=0.8, label='Wing Path')
+    # --- TRACE 1: Body Trajectory (CoM) ---
+    # STYLE: Dashed line, Lighter Grey. Looks like a "Flight Plan".
+    traj_line, = ax.plot([], [], color='#95a5a6', linestyle='--', linewidth=1.5, alpha=0.8, label='CoM Path')
+
+    # --- TRACE 2: Wing Tip Trace ---
+    # STYLE: Solid line, Darker Grey. Looks like "Motion Blur".
+    wing_traj_line, = ax.plot([], [], color='#2c3e50', linestyle='-', linewidth=1.2, alpha=0.9, label='Wing Path')
     
-    # --- SCALED Body Parts ---
-    # Base dims: Thorax(0.012, 0.006), Head(0.0025), Abd(0.018, 0.008)
+    # --- SCALED Body Parts (Flat Design - No Outlines) ---
+    # Removed edgecolor='k' and replaced with edgecolor='none'
     
     patch_thorax = patches.Ellipse((0,0), 
                                    width=0.012 * th_viz_scale, 
                                    height=0.006 * th_viz_scale, 
-                                   facecolor='#404040', edgecolor='k', linewidth=1.2, zorder=10)
+                                   facecolor='#404040', edgecolor='none', zorder=10)
     
     patch_head = patches.Circle((0,0), 
-                                radius=0.0025 * th_viz_scale, # Head scales with Thorax
-                                facecolor='#b0b0b0', edgecolor='k', linewidth=1.2, zorder=10)
+                                radius=0.0025 * th_viz_scale,
+                                facecolor='#b0b0b0', edgecolor='none', zorder=10)
     
     patch_abd = patches.Ellipse((0,0), 
                                 width=0.018 * ab_viz_scale, 
                                 height=0.008 * ab_viz_scale, 
-                                facecolor='#707070', edgecolor='k', linewidth=1.2, alpha=0.9, zorder=9)
+                                facecolor='#707070', edgecolor='none', alpha=0.9, zorder=9)
     
     ax.add_patch(patch_thorax)
     ax.add_patch(patch_head)
