@@ -241,7 +241,7 @@ class InferenceFlyEnv:
         return (final_r, final_f, final_o, phys_p), stacked_viz_frames
 
 # ==============================================================================
-# 4. SIMULATION LOOP (Dual Mode)
+# 4. SIMULATION LOOP (Decoupled Viz Logic Restored)
 # ==============================================================================
 def run_simulation(params, mode='nominal'):
     print(f"--> Initializing Environment (Mode: {mode})...")
@@ -263,12 +263,12 @@ def run_simulation(params, mode='nominal'):
     ab_scale = float(p_single.abd_mass_scale)
     print(f"--> Simulating {batch_size} Agent(s) for {duration}s...")
     
-    total_steps = int(duration / (Config.DT * Config.SIM_SUBSTEPS))
+    total_control_steps = int(duration / (Config.DT * Config.SIM_SUBSTEPS))
     
     # Data containers
     traj_history = []  # For Chaos (Position only)
     detailed_history = {'r': [], 'w': [], 'f': [], 't': [], 'p_force': [], 'p_torque': [], 
-                        'meta': {'th_scale': th_scale, 'ab_scale': ab_scale}} # For GIF
+                        'meta': {'th_scale': th_scale, 'ab_scale': ab_scale}}
 
     @jax.jit
     def inference_step(curr_state, curr_params, ext_f, ext_t):
@@ -284,49 +284,62 @@ def run_simulation(params, mode='nominal'):
     _ = inference_step(state, params, jnp.zeros(2), 0.0)
     print("--> JAX Compilation Complete.")
 
-    t_sim = 0.0
-    for i in range(total_steps):
+    t_sim = 0.0 # This tracks "Base" time at the start of the block
+    
+    for i in range(total_control_steps):
         ext_f = jnp.zeros(2)
         ext_t = 0.0
         
         # Apply wind only in Nominal mode
         if mode == 'nominal' and Config.PERTURBATION:
-            if Config.PERTURB_TIME <= t_sim <= Config.PERTURB_TIME + 0.002:
+            # Check if ANY part of this control block overlaps the perturbation time
+            block_end_time = t_sim + (Config.DT * Config.SIM_SUBSTEPS)
+            if (t_sim <= Config.PERTURB_TIME + 0.002) and (block_end_time >= Config.PERTURB_TIME):
                 ext_f = Config.PERTURB_FORCE
                 ext_t = Config.PERTURB_TORQUE
         
         state, stacked_frames = inference_step(state, params, ext_f, ext_t)
         
-        # --- DATA COLLECTION ---
-        if i % Config.VIZ_STEP_SKIP == 0:
+        # --- DECOUPLED DATA COLLECTION ---
+        # 1. Calculate the Global Physics Step indices for this entire block
+        start_step_idx = i * Config.SIM_SUBSTEPS
+        block_indices = np.arange(start_step_idx, start_step_idx + Config.SIM_SUBSTEPS)
+        
+        # 2. Find which substeps match the skip criteria (e.g., every 70th step)
+        matches = np.where(block_indices % Config.VIZ_STEP_SKIP == 0)[0]
+        
+        if len(matches) > 0:
             if mode == 'chaos':
-                # Chaos Mode: Just save positions [Batch, Dim]
-                traj_history.append(np.array(state[0]))
+                # Chaos Mode: Save positions for matching substeps
+                # stacked_frames[0] is 'r' [Substeps, Batch, Dim]
+                for m in matches:
+                    traj_history.append(np.array(stacked_frames[0][m]))
             else:
-                # Nominal Mode: Save detailed frames for GIF
-                # stacked_frames contains [Substeps, Batch, Dim]
-                # We extract the specific substeps corresponding to VIZ_STEP_SKIP
-                # Since we skip inside the loop, we just take the last frame of this block
-                
-                # Unpack frame (Single Agent)
-                # Structure: (r, wing, f_nodal, le, h)
+                # Nominal Mode: Save detailed frames
                 s_r, s_w, s_f, _, _ = stacked_frames 
                 
-                # Take the last substep of this control step
-                # And the 0-th agent
-                idx = -1 
-                detailed_history['r'].append(np.array(s_r[idx, 0]))
-                detailed_history['w'].append(np.array(s_w[idx, 0]))
-                detailed_history['f'].append(np.array(s_f[idx, 0]))
-                detailed_history['t'].append(t_sim)
-                
-                has_force = np.linalg.norm(ext_f) > 0
-                has_torque = abs(ext_t) > 0
-                detailed_history['p_force'].append(has_force)
-                detailed_history['p_torque'].append(has_torque)
+                # Loop through the matching substeps and save them
+                for m in matches:
+                    # Time specific to this substep
+                    sub_t = t_sim + (m * Config.DT)
+                    
+                    detailed_history['r'].append(np.array(s_r[m, 0]))
+                    detailed_history['w'].append(np.array(s_w[m, 0]))
+                    detailed_history['f'].append(np.array(s_f[m, 0]))
+                    detailed_history['t'].append(sub_t)
+                    
+                    # Perturbation flags
+                    # Check exact time of this substep against perturbation window
+                    is_p = (Config.PERTURB_TIME <= sub_t <= Config.PERTURB_TIME + 0.002)
+                    detailed_history['p_force'].append(is_p and np.linalg.norm(ext_f) > 0)
+                    detailed_history['p_torque'].append(is_p and abs(ext_t) > 0)
 
+        # Advance Time
         t_sim += (Config.DT * Config.SIM_SUBSTEPS)
-        if i % 50 == 0: print(f"    Step {i}/{total_steps}", end='\r')
+        
+        # Restored Progress Bar
+        if i % 100 == 0:
+            print(f"    Progress: {i}/{total_control_steps} blocks | T={t_sim:.3f}s")
 
     return (traj_history if mode == 'chaos' else detailed_history), env
 
