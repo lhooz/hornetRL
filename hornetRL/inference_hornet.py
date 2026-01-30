@@ -192,12 +192,18 @@ class InferenceFlyEnv:
         
         # Sub-step function to map over batch
         def sub_step_vmap_fn(curr_r, curr_f, curr_o, curr_a, curr_p, ext_f, ext_t):
+            # --- 1. Compute Physical Properties for this agent ---
+            curr_props = self.phys.robot.compute_props(curr_p)
+
+            # --- 2. Update Oscillator ---
             o_next = step_oscillator(curr_o, unpack_action(curr_a), Config.DT)
             k_angles, k_rates, tau_abd, bias = get_wing_kinematics(o_next, unpack_action(curr_a))
             action_data = (k_angles, k_rates, tau_abd, bias)
 
+            # --- 3. Update Physics ---
+            # FIX: Pass 'curr_props', NOT 'curr_p'
             (r_next_v, f_next), _, f_nodal, wing_pose, hinge_marker = self.phys.step(
-                self.phys.fluid.params, (curr_r, curr_f), action_data, curr_p, 0.0, Config.DT
+                self.phys.fluid.params, (curr_r, curr_f), action_data, curr_props, 0.0, Config.DT
             )
             
             # Apply Perturbation
