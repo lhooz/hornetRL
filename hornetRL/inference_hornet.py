@@ -55,7 +55,7 @@ class Config:
     PERTURBATION = True  
     PERTURB_TIME = 0.02  
     PERTURB_FORCE = jnp.array([0.9, -1.2]) 
-    PERTURB_TORQUE = -0.0025
+    PERTURB_TORQUE = -0.003
 
 def symlog(x):
     return jnp.sign(x) * jnp.log1p(jnp.abs(x))
