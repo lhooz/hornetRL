@@ -62,10 +62,10 @@ class Config:
     MAX_GRAD_NORM = 1.0     # Gradient Clipping threshold
     GAMMA = 0.99            # Discount Factor
 
-    OBS_NOISE_SIGMA = 0.01  # Observation noise sigma
+    OBS_NOISE_SIGMA = 0.002  # Observation noise sigma
     # --- Action Space Noise (Motor Jitter) ---
     # Standard deviation of the noise injected into the normalized muscle input [-1, 1].
-    ACTION_NOISE_SIGMA = 0.02
+    ACTION_NOISE_SIGMA = 0.2
 
     TOTAL_UPDATES = 100000   # Total Gradient Steps
 
@@ -327,6 +327,23 @@ def train():
             # Fallback for old checkpoints
             pbt_state = init_pbt_state(rng, Config.BATCH_SIZE, Config.PBT_BASE_WEIGHTS)
             print("    -> WARNING: No PBT state found. Resetting PBT curriculum.")
+
+        # === 3. OPTIONAL: FORCE WEIGHT INJECTION ===
+        # This updates PBT weights from Config by running with --reset_PBTweights
+        if args.reset_PBTweights:
+            print("\n" + "!"*60)
+            print("--> [MANUAL INTERVENTION] --reset_PBTweights FLAG DETECTED")
+            print("    Overwriting PBT weights with NEW values from Config.")
+            print("    (Useful for fixing 'stuck' agents or changing priorities mid-run)")
+            print("!"*60 + "\n")
+            
+            # Generate fresh state based on CURRENT Config.PBT_BASE_WEIGHTS
+            # We use a dummy key because we only care about the initial weight values
+            dummy_key = jax.random.PRNGKey(0)
+            fresh_pbt = init_pbt_state(dummy_key, Config.BATCH_SIZE, Config.PBT_BASE_WEIGHTS)
+            
+            # Inject ONLY the weights, keeping other PBT history (like running_reward)
+            pbt_state = pbt_state._replace(weights=fresh_pbt.weights)
 
         match = re.search(r"params_(\d+)", last_ckpt)
         if match: start_step = int(match.group(1)) + 1
@@ -709,6 +726,8 @@ if __name__ == "__main__":
                         help="Directory to save checkpoints and visuals")
     parser.add_argument("--gpu", action="store_true", 
                         help="Enable GPU (Removes CPU forcing)")
+    parser.add_argument("--reset_PBTweights", action="store_true", 
+                        help="force-overwrite PBT weights from Config (One-time fix)")
     args = parser.parse_args()
 
     # 1. Handle Path Config
