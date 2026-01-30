@@ -54,8 +54,8 @@ class Config:
     # --- Robustness Testing (Wind Gust) ---
     PERTURBATION = True  
     PERTURB_TIME = 0.02  
-    PERTURB_FORCE = jnp.array([1.0, -1.4]) 
-    PERTURB_TORQUE = -0.002
+    PERTURB_FORCE = jnp.array([0.9, -1.2]) 
+    PERTURB_TORQUE = -0.0025
 
 def symlog(x):
     return jnp.sign(x) * jnp.log1p(jnp.abs(x))
