@@ -37,13 +37,13 @@ class Config:
     # --- Mode 1: Nominal GIF Settings ---
     DURATION = 1.0       
     FPS = 60             
-    DPI = 60            
+    DPI = 60             
     VIZ_STEP_SKIP = 70
     TRACE_HIST_LEN = 6   # ~1.5 wingbeats
     N_SHADOW_WINGS = 7   
     
     # --- Mode 2: Chaos Plot Settings ---
-    CHAOS_BATCH_SIZE = 50
+    CHAOS_BATCH_SIZE = 10
     CHAOS_DURATION = 0.5 # Shorter time needed to see recovery
     
     # --- Physics Settings ---
@@ -201,18 +201,16 @@ class InferenceFlyEnv:
             action_data = (k_angles, k_rates, tau_abd, bias)
 
             # --- 3. Update Physics ---
-            # FIX: Pass 'curr_props', NOT 'curr_p'
             (r_next_v, f_next), _, f_nodal, wing_pose, hinge_marker = self.phys.step(
                 self.phys.fluid.params, (curr_r, curr_f), action_data, curr_props, 0.0, Config.DT
             )
             
             # Apply Perturbation
-            total_mass = (self.phys.robot.m_thorax * curr_p.thorax_mass_scale + 
-                          self.phys.robot.m_abdomen * curr_p.abd_mass_scale)
+            total_mass = curr_props.m_thorax + curr_props.m_abdomen
             accel_lin = ext_f / total_mass
             r_next_v = r_next_v.at[4:6].add(accel_lin * Config.DT)
             
-            inertia = self.phys.robot.I_thorax * curr_p.thorax_mass_scale
+            inertia = curr_props.I_thorax
             accel_ang = ext_t / inertia
             r_next_v = r_next_v.at[6].add(accel_ang * Config.DT)
             
@@ -241,7 +239,7 @@ class InferenceFlyEnv:
         return (final_r, final_f, final_o, phys_p), stacked_viz_frames
 
 # ==============================================================================
-# 4. SIMULATION LOOP (Decoupled Viz Logic Restored)
+# 4. SIMULATION LOOP (Dual Mode)
 # ==============================================================================
 def run_simulation(params, mode='nominal'):
     print(f"--> Initializing Environment (Mode: {mode})...")
@@ -257,10 +255,15 @@ def run_simulation(params, mode='nominal'):
 
     state = env.reset(rng, batch_size=batch_size, mode=mode)
     
-    # Store physics scale for plotting
+    # Capture ALL scales for chaos plotting
+    phys_p_batch = state[3]
+    all_scales_th = np.array(phys_p_batch.thorax_mass_scale)
+    
+    # Store single-agent physics scale for GIF
     p_single = jax.tree.map(lambda x: x[0], state[3])
     th_scale = float(p_single.thorax_mass_scale)
     ab_scale = float(p_single.abd_mass_scale)
+    
     print(f"--> Simulating {batch_size} Agent(s) for {duration}s...")
     
     total_control_steps = int(duration / (Config.DT * Config.SIM_SUBSTEPS))
@@ -284,15 +287,13 @@ def run_simulation(params, mode='nominal'):
     _ = inference_step(state, params, jnp.zeros(2), 0.0)
     print("--> JAX Compilation Complete.")
 
-    t_sim = 0.0 # This tracks "Base" time at the start of the block
-    
+    t_sim = 0.0
     for i in range(total_control_steps):
         ext_f = jnp.zeros(2)
         ext_t = 0.0
         
         # Apply wind only in Nominal mode
         if mode == 'nominal' and Config.PERTURBATION:
-            # Check if ANY part of this control block overlaps the perturbation time
             block_end_time = t_sim + (Config.DT * Config.SIM_SUBSTEPS)
             if (t_sim <= Config.PERTURB_TIME + 0.002) and (block_end_time >= Config.PERTURB_TIME):
                 ext_f = Config.PERTURB_FORCE
@@ -300,55 +301,45 @@ def run_simulation(params, mode='nominal'):
         
         state, stacked_frames = inference_step(state, params, ext_f, ext_t)
         
-        # --- DECOUPLED DATA COLLECTION ---
-        # 1. Calculate the Global Physics Step indices for this entire block
+        # --- DATA COLLECTION ---
         start_step_idx = i * Config.SIM_SUBSTEPS
         block_indices = np.arange(start_step_idx, start_step_idx + Config.SIM_SUBSTEPS)
-        
-        # 2. Find which substeps match the skip criteria (e.g., every 70th step)
         matches = np.where(block_indices % Config.VIZ_STEP_SKIP == 0)[0]
         
         if len(matches) > 0:
             if mode == 'chaos':
-                # Chaos Mode: Save positions for matching substeps
-                # stacked_frames[0] is 'r' [Substeps, Batch, Dim]
                 for m in matches:
-                    traj_history.append(np.array(stacked_frames[0][m]))
+                    r_snap = np.array(stacked_frames[m])
+                    traj_history.append(r_snap)
             else:
-                # Nominal Mode: Save detailed frames
                 s_r, s_w, s_f, _, _ = stacked_frames 
-                
-                # Loop through the matching substeps and save them
                 for m in matches:
-                    # Time specific to this substep
                     sub_t = t_sim + (m * Config.DT)
-                    
                     detailed_history['r'].append(np.array(s_r[m, 0]))
                     detailed_history['w'].append(np.array(s_w[m, 0]))
                     detailed_history['f'].append(np.array(s_f[m, 0]))
                     detailed_history['t'].append(sub_t)
-                    
-                    # Perturbation flags
-                    # Check exact time of this substep against perturbation window
                     is_p = (Config.PERTURB_TIME <= sub_t <= Config.PERTURB_TIME + 0.002)
                     detailed_history['p_force'].append(is_p and np.linalg.norm(ext_f) > 0)
                     detailed_history['p_torque'].append(is_p and abs(ext_t) > 0)
 
-        # Advance Time
         t_sim += (Config.DT * Config.SIM_SUBSTEPS)
-        
-        # Restored Progress Bar
         if i % 100 == 0:
             print(f"    Progress: {i}/{total_control_steps} blocks | T={t_sim:.3f}s")
 
-    return (traj_history if mode == 'chaos' else detailed_history), env
+    if mode == 'chaos':
+        return traj_history, all_scales_th, env # Return scales for plotting
+    else:
+        return detailed_history, env
 
 # ==============================================================================
-# 5. VISUALIZATION A: CHAOS PLOT
+# 5. VISUALIZATION A: CHAOS PLOT (With Size Scaling)
 # ==============================================================================
-def generate_chaos_plot(history):
+def generate_chaos_plot(history, scales):
     print("\n--> Generating Chaos Trajectory Plot...")
-    data = np.stack(history, axis=0) # [Time, Batch, State]
+    
+    # history is list of (Batch, 8) arrays
+    data = np.stack(history, axis=0) # Result: (Time, Batch, 8)
     num_steps, num_agents, _ = data.shape
     
     fig, ax = plt.subplots(figsize=(10, 10), dpi=150)
@@ -358,21 +349,27 @@ def generate_chaos_plot(history):
     
     ax.scatter(0, 0, color='#27ae60', s=150, marker='+', zorder=10, label='Target', linewidth=2)
     
-    # Color map for swarm
-    colors = plt.cm.viridis(np.linspace(0, 1, num_agents))
+    # Calculate Dot Sizes based on Mass (Cube Root scaling)
+    # Norm scale 1.0 -> size 30. Scale 1.2 -> larger.
+    base_size = 35
+    viz_sizes = base_size * (scales ** (2/3)) # Surface area scaling for 2D dots
     
     for i in range(num_agents):
         traj_x = data[:, i, 0]
         traj_z = data[:, i, 1]
+        
+        # Use individual size
+        s_i = viz_sizes[i]
+        
         ax.plot(traj_x, traj_z, color='black', alpha=0.15, linewidth=0.8)
-        ax.scatter(traj_x[0], traj_z[0], color='#e74c3c', s=25, marker='x', alpha=0.7)
-        ax.scatter(traj_x[-1], traj_z[-1], color='#3498db', s=25, marker='.', alpha=0.8)
+        ax.scatter(traj_x[0], traj_z[0], color='#e74c3c', s=s_i, marker='x', alpha=0.7)
+        ax.scatter(traj_x[-1], traj_z[-1], color='#3498db', s=s_i, marker='.', alpha=0.8)
 
-    ax.set_xlim(-0.20, 0.20)
-    ax.set_ylim(-0.20, 0.20)
+    ax.set_xlim(-0.25, 0.25)
+    ax.set_ylim(-0.25, 0.25)
     ax.set_xlabel("X Position (m)")
     ax.set_ylabel("Z Position (m)")
-    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\nInitial: Pos +/- 15cm, Pitch +/- 1.5rad")
+    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\nDot Size reflects Fly Mass (Randomized +/- 20%)")
     
     legend_elements = [
         Line2D([0], [0], marker='+', color='w', markeredgecolor='#27ae60', markersize=10, label='Target'),
@@ -401,7 +398,6 @@ def generate_gif(data, env):
     th_viz_scale = np.cbrt(data['meta']['th_scale'])
     ab_viz_scale = np.cbrt(data['meta']['ab_scale'])
     
-    # Pre-calc wing relative history
     wing_rel_history = []
     for i in range(len(r_states)):
         r, w = r_states[i], w_poses[i]
@@ -418,7 +414,6 @@ def generate_gif(data, env):
     ax.set_facecolor('white')
     ax.grid(True, color='#e0e0e0', linestyle='-', linewidth=1.0)
     
-    # Graphic Objects
     traj_line, = ax.plot([], [], color='#95a5a6', linestyle='--', linewidth=1.5, alpha=0.8, label='CoM Path')
     wing_traj_line, = ax.plot([], [], color='#2c3e50', linestyle='-', linewidth=1.2, alpha=0.9, label='Wing Path')
     
@@ -484,8 +479,7 @@ def generate_gif(data, env):
         if len(rel_chunk) > 0:
             c, s = np.cos(r_th), np.sin(r_th)
             wing_traj_line.set_data(rel_chunk[:,0]*c - rel_chunk[:,1]*s + rx, rel_chunk[:,0]*s + rel_chunk[:,1]*c + rz)
-        else:
-            wing_traj_line.set_data([], [])
+        else: wing_traj_line.set_data([], [])
 
         is_force = flag_force[idx]; is_torque = flag_torque[idx]
         if is_force:
@@ -547,8 +541,8 @@ if __name__ == "__main__":
         params = jax.tree.map(lambda x: x[0], data['params'])
 
     if args.chaos:
-        hist, _ = run_simulation(params, mode='chaos')
-        generate_chaos_plot(hist)
+        hist, scales, _ = run_simulation(params, mode='chaos')
+        generate_chaos_plot(hist, scales)
     else:
         hist, env = run_simulation(params, mode='nominal')
         generate_gif(hist, env)
