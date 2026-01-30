@@ -52,7 +52,7 @@ class Config:
     SIM_SUBSTEPS = 72       # Physics steps per Control Step
                             # Effective Control Freq: ~1666 Hz (0.6ms)
                             
-    HORIZON = 35            # Trajectory horizon for Back-propagation Through Time (BPTT).
+    HORIZON = 36            # Trajectory horizon for Back-propagation Through Time (BPTT).
                             # Duration: ~0.038s (~4.4 wingbeats), sufficient for stability convergence.
     RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
     PBT_INTERVAL = 1000      # Evolution interval (Survival of the fittest)
@@ -90,7 +90,7 @@ class Config:
 
     CKPT_DIR = "checkpoints_shac"
     VIS_DIR = "checkpoints_shac"
-    AUX_LOSS_WEIGHT = 0.01 
+    AUX_LOSS_WEIGHT = 1.0 
     VIS_INTERVAL = 200      
     
     WARMUP_STEPS = 1        # Control steps to pin the fly before releasing dynamics.
@@ -149,7 +149,7 @@ def run_visualization(env, params, update_idx, vis_step_fn):
     print(f"--> Generatng Visualization for Step {update_idx}...")
 
     steps_per_frame = 1
-    total_visual_frames = Config.HORIZON * 5
+    total_visual_frames = Config.HORIZON * 8
 
     sim_data = {'states': [], 'wing_pose': [], 'nodal_forces': [], 'le_marker': [], 'hinge_marker': [], 't': []}
     
@@ -444,9 +444,9 @@ def train():
             norm_diff = raw_diff / Config.FORCE_NORMALIZER[:3]
             
             # 3. Square the Normalized Difference
-            # (0.1)^2 = 0.01. With Weight=1.0, this is still small.
-            # You might want to increase AUX_LOSS_WEIGHT to 10.0 or 100.0 in Config.
-            force_err_norm = jnp.mean(norm_diff**2)
+            # Use Symlog to compress the error BEFORE squaring.
+            # This prevents massive hallucinations (e.g. 1000N) from dominating the gradient.
+            force_err_norm = jnp.mean(jnp.square(symlog(norm_diff)))
             
             # 4. Apply Weight
             loss_t = -rew_scaled + (Config.AUX_LOSS_WEIGHT * force_err_norm)
