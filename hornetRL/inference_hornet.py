@@ -41,11 +41,11 @@ class Config:
     # --- Inference Settings ---
     DURATION = 1.0       
     FPS = 60             
-    DPI = 100            
+    DPI = 80            
     
-    VIZ_STEP_SKIP = 40
+    VIZ_STEP_SKIP = 30
     TRACE_HIST_LEN = 15
-    N_SHADOW_WINGS = 7 
+    N_SHADOW_WINGS = 5
     
     # --- Randomization Settings ---
     # Set to True to see how the agent handles the random physics you defined
