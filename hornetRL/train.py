@@ -65,7 +65,7 @@ class Config:
     OBS_NOISE_SIGMA = 0.01  # Observation noise sigma
     # --- Action Space Noise (Motor Jitter) ---
     # Standard deviation of the noise injected into the normalized muscle input [-1, 1].
-    ACTION_NOISE_SIGMA = 0.1
+    ACTION_NOISE_SIGMA = 0.02
 
     TOTAL_UPDATES = 100000   # Total Gradient Steps
 
@@ -78,7 +78,7 @@ class Config:
     PBT_BASE_WEIGHTS = jnp.array([
         200.0,    # Pos (The "Pot of Gold" max value)
         10.0,     # Th_Ang (Orientation penalty)
-        1.0,     # Ab_Ang (Abdomen stability)
+        10.0,     # Ab_Ang (Abdomen stability)
         0.1,     # Lin_Vel (Drift damping)
         0.002,     # Ang_Vel (Vibration damping)
         0.1      # Eff (Force efficiency)
