@@ -515,10 +515,15 @@ def generate_gif(data, env):
     num_frames = int(len(r_states))
     ani = animation.FuncAnimation(fig, update, frames=num_frames, interval=800/Config.FPS, blit=True)
     
-    out_name = "hornet_flight_inference_pro.gif"
+    out_name = "hornet_flight_inference.gif"
     print(f"--> Saving to {out_name}...")
-    ani.save(out_name, writer='pillow', fps=Config.FPS, savefig_kwargs={'transparent': False})
-    print("--> Done!")
+    try:
+        ani.save(out_name, writer='pillow', fps=Config.FPS)
+        print(f"--> Done! File saved to {os.path.abspath(out_name)}")
+        print(f"--> File Size: {os.path.getsize(out_name) / 1024:.2f} KB")
+    except Exception as e:
+        print(f"--> Error during saving: {e}")
+
     plt.close(fig)
 
 # ==============================================================================
