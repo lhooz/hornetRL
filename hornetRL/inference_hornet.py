@@ -27,10 +27,6 @@ from .neural_idapbc import policy_network_icnn, unpack_action
 class Config:
     """
     Configuration for the Inference / Evaluation pipeline.
-    
-    Parameters must match the training configuration to ensure the learned policy 
-    behaves correctly. Includes additional settings for visualization and 
-    robustness testing (perturbations).
     """
     # --- Model Constants (Must match Training) ---
     BASE_FREQ = 115.0  
@@ -40,73 +36,53 @@ class Config:
 
     # --- Simulation Settings ---
     DT = 3e-5             
-    SIM_SUBSTEPS = 40    # Physics integration steps per single Control step
+    SIM_SUBSTEPS = 72    
     
     # --- Inference Settings ---
-    DURATION = 1.0       # Total simulation time (seconds)
-    FPS = 60             # Output GIF frame rate
-    DPI = 150            # Output resolution
+    DURATION = 1.0       
+    FPS = 60             
+    DPI = 150            
     
-    # Visualization Downsampling:
-    # Skips frames to keep memory usage manageable during long simulations.
-    # 50 = Render every 50th physics block.
     VIZ_STEP_SKIP = 40
+    TRACE_HIST_LEN = 15
+    N_SHADOW_WINGS = 7 
+    
+    # --- Randomization Settings ---
+    # Set to True to see how the agent handles the random physics you defined
+    USE_DOMAIN_RANDOMIZATION = True 
     
     # --- Robustness Testing (Wind Gust) ---
     PERTURBATION = True  
-    PERTURB_TIME = 0.02  # Time of impact (s)
-    
-    # Force Vector: [X, Z] Newtons (Simulates a lateral wind gust)
-    PERTURB_FORCE = jnp.array([0.8, -1.4]) 
-    # Torque: Positive = Pitch Up (Simulates aerodynamic instability)
-    PERTURB_TORQUE = -0.002
+    PERTURB_TIME = 0.02  
+    PERTURB_FORCE = jnp.array([1.0, -1.4]) 
+    PERTURB_TORQUE = -0.003
 
 def symlog(x):
-    """Symmetric Log scaling."""
     return jnp.sign(x) * jnp.log1p(jnp.abs(x))
 
 # ==============================================================================
 # 2. MODEL DEFINITION
 # ==============================================================================
 def actor_critic_fn(robot_state):
-    """
-    Reconstructs the Actor-Critic architecture for inference.
-    
-    Only the Actor (Policy) is used during inference, but the full structure 
-    is required to correctly load weights from the checkpoint.
-    """
-    # 1. Prepare Target in SymLog Space
     target_sym = symlog(Config.TARGET_STATE)
-
-    # 2. Actor (Brain + Muscles)
     mods, forces = policy_network_icnn(
         robot_state, 
         target_state=target_sym,
     )
-    
-    # 3. Critic (Exact match to training to preserve parameter structure)
+    # Critic structure needed for loading weights
     value = hk.Sequential([
         hk.Linear(128), jax.nn.tanh,
         hk.Linear(128), jax.nn.tanh,
         hk.Linear(1)
     ])(robot_state)
-    
     return mods, forces, value
 
 ac_model = hk.without_apply_rng(hk.transform(actor_critic_fn))
 
 # ==============================================================================
-# 3. INFERENCE ENVIRONMENT
+# 3. INFERENCE ENVIRONMENT (With Domain Randomization)
 # ==============================================================================
 class InferenceFlyEnv:
-    """
-    A specialized environment for evaluation.
-    
-    Differences from Training Env:
-    1. Deterministic initialization (starts exactly at target).
-    2. Supports external force/torque injection for disturbance rejection testing.
-    3. Returns detailed visualization frames including force markers.
-    """
     def __init__(self):
         self.phys = FlappingFlySystem(
             model_path='fluid.pkl', 
@@ -114,46 +90,84 @@ class InferenceFlyEnv:
         )
 
     def reset(self, key):
-        """Initializes the fly in a stable hover state."""
-        # 1. Init Robot State (Start exactly at Target)
+        """Initializes the fly with Domain Randomization logic."""
         batch_size = 1
         
+        # 1. Init Robot State (Start exactly at Target)
         q_pos = jnp.array([[0.0, 0.0]]) 
         q_ang = jnp.array([[1.08, 0.3]])
         v = jnp.zeros((batch_size, 4))
-        
         robot_state_v = jnp.concatenate([q_pos, q_ang, v], axis=1)
 
         # 2. Init Oscillator
         osc_state = OscillatorState.init(base_freq=Config.BASE_FREQ)
         osc_state = jax.tree.map(lambda x: jnp.stack([x]*batch_size), osc_state)
 
-       # 3. Define NOMINAL Physics Parameters (No Randomization for Inference)
-        # We use scale=1.0 and offset=0.0 to test the "Ideal" Hornet.
-        # Can modify this later to stress-test the policy against heavy/light hornets
-        
+        # =========================================================
+        # 3. DOMAIN RANDOMIZATION (Physics Parameters)
+        # =========================================================
+        if Config.USE_DOMAIN_RANDOMIZATION:
+            # We use the provided key to trigger the randomization
+            k1, k2, k3, k4, k_shuffle = jax.random.split(key, 5)
+            k_mass, k_com, k_hinge, k_st, k_joint = jax.random.split(k3, 5)
+            
+            # A. Mass & Inertia Scaling (+/- 20%)
+            mass_scale_th = jax.random.uniform(k_mass, (batch_size,), minval=0.80, maxval=1.20)
+            mass_scale_ab = jax.random.uniform(k_mass, (batch_size,), minval=0.80, maxval=1.20)
+
+            # B. Center of Mass Shifts
+            off_x_th = jax.random.uniform(k_com, (batch_size,), minval=-0.002, maxval=0.002)
+            off_x_ab = jax.random.uniform(k_com, (batch_size,), minval=-0.002, maxval=0.002)
+
+            # C. Hinge Location Noise
+            h_x_noise = jax.random.uniform(k_hinge, (batch_size,), minval=-0.001, maxval=0.001)
+            h_z_noise = jax.random.uniform(k_hinge, (batch_size,), minval=-0.001, maxval=0.001)
+
+            # D. Stroke Plane Angle Noise
+            st_ang_noise = jax.random.uniform(k_st, (batch_size,), minval=-0.08, maxval=0.08)
+
+            # E. Joint Stiffness/Damping
+            k_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
+            b_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
+            
+            # Equilibrium Angle Noise
+            phi_eq_off = jax.random.uniform(k_joint, (batch_size,), minval=-0.17, maxval=0.17)
+        else:
+            # Nominal parameters (Ideal Hornet)
+            mass_scale_th = jnp.array([1.0])
+            mass_scale_ab = jnp.array([1.0])
+            off_x_th = jnp.array([0.0])
+            off_x_ab = jnp.array([0.0])
+            h_x_noise = jnp.array([0.0])
+            h_z_noise = jnp.array([0.0])
+            st_ang_noise = jnp.array([0.0])
+            k_hinge_scale = jnp.array([1.0])
+            b_hinge_scale = jnp.array([1.0])
+            phi_eq_off = jnp.array([0.0])
+
+        # Pack into PhysParams NamedTuple
         phys_params = PhysParams(
-            thorax_mass_scale=jnp.array([1.0]),
-            abd_mass_scale=jnp.array([1.0]),
-            thorax_offset_x=jnp.array([0.0]),
-            abd_offset_x=jnp.array([0.0]),
-            hinge_x_noise=jnp.array([0.0]),
-            hinge_z_noise=jnp.array([0.0]),
-            stroke_ang_noise=jnp.array([0.0]),
-            k_hinge_scale=jnp.array([1.0]),
-            b_hinge_scale=jnp.array([1.0]),
-            phi_equil_offset=jnp.array([0.0])
+            thorax_mass_scale=mass_scale_th,
+            abd_mass_scale=mass_scale_ab,
+            thorax_offset_x=off_x_th,
+            abd_offset_x=off_x_ab,
+            hinge_x_noise=h_x_noise,
+            hinge_z_noise=h_z_noise,
+            stroke_ang_noise=st_ang_noise,
+            k_hinge_scale=k_hinge_scale,
+            b_hinge_scale=b_hinge_scale,
+            phi_equil_offset=phi_eq_off
         )
 
-        # 4. Calculate Centered Wing Pose for Fluid Surrogate
+        # 4. Compute Derived Properties
         self.active_props = jax.tree.map(lambda x: x[0], jax.vmap(self.phys.robot.compute_props)(phys_params))
 
+        # 5. Initialize Wing Pose
         zero_action = jnp.zeros((batch_size, 9)) 
         ret = jax.vmap(get_wing_kinematics)(osc_state, unpack_action(zero_action))
         k_angles, k_rates = ret[0], ret[1]
         
         robot_state_dummy = jnp.concatenate([robot_state_v[:, :4], jnp.zeros((batch_size, 4))], axis=1)
-        # in_axes (0, 0, 0, None) means map the first 3 args, but treat the 4th (props) as a single value
         wing_pose_global, _ = jax.vmap(self.phys.robot.get_kinematics, in_axes=(0, 0, 0, None))(robot_state_dummy, k_angles, k_rates, self.active_props)
         
         # --- Center Pose Logic ---
@@ -176,7 +190,6 @@ class InferenceFlyEnv:
             p_y = w_pose_glob[1] - (q[1] + off_z)
             return jnp.array([p_x, p_y, w_pose_glob[2]])
 
-        # Again, tell vmap the last argument (props) is not batched
         wing_pose_centered = jax.vmap(get_centered_pose, in_axes=(0, 0, 0, None))(robot_state_v, wing_pose_global, osc_state.bias, self.active_props)
         
         def init_fluid_fn(wp): return self.phys.fluid.init_state(wp[0], wp[1], wp[2])
@@ -185,61 +198,51 @@ class InferenceFlyEnv:
         return (robot_state_v, fluid_state, osc_state, phys_params)
 
     def step(self, full_state, action_mods, external_force=jnp.zeros(2), external_torque=0.0):
-        """
-        Advances the simulation, applying actions and optional external disturbances.
-        """
+        # ... (Step logic matches previous, simply passes phys_params through) ...
         robot_st, fluid_st, osc_st, phys_p = full_state
         
-        # Unpack Batch (Simulate single agent)
         r = robot_st[0]
         f = jax.tree.map(lambda x: x[0], fluid_st) 
         o = jax.tree.map(lambda x: x[0], osc_st)
         a = action_mods[0]
+        # phys_p is already unbatched in this context if we map it, 
+        # but let's be consistent and take [0] of the batch
         p_single = jax.tree.map(lambda x: x[0], phys_p)
 
         def sub_step_fn(carry, _):
             curr_r, curr_f, curr_o = carry
-            
-            # 1. Update Oscillator
             o_next = step_oscillator(curr_o, unpack_action(a), Config.DT)
             k_angles, k_rates, tau_abd, bias = get_wing_kinematics(o_next, unpack_action(a))
             action_data = (k_angles, k_rates, tau_abd, bias)
 
-            # 2. Update Physics
             (r_next_v, f_next), _, f_nodal, wing_pose, hinge_marker = self.phys.step(
                 self.phys.fluid.params, 
                 (curr_r, curr_f), 
                 action_data, 
-                self.active_props, # <--- Use the stored computed props
+                self.active_props, 
                 0.0, 
                 Config.DT
             )
             
-            # --- Apply Perturbations (Wind Gust) ---
-            # F = ma  ->  a = F/m
+            # --- Apply Perturbations ---
+            # Use RANDOMIZED Mass for F=ma calculation
             total_mass = (self.phys.robot.m_thorax * p_single.thorax_mass_scale + 
                           self.phys.robot.m_abdomen * p_single.abd_mass_scale)
             accel_lin = external_force / total_mass
             r_next_v = r_next_v.at[4:6].add(accel_lin * Config.DT)
             
-            # Tau = Ia -> alpha = Tau/I
             inertia = self.phys.robot.I_thorax * p_single.thorax_mass_scale
             accel_ang = external_torque / inertia
             r_next_v = r_next_v.at[6].add(accel_ang * Config.DT)
             
-            # Pack visualization frame
             viz_frame = (r_next_v, wing_pose, f_nodal, f_next.marker_le, hinge_marker)
-
             return (r_next_v, f_next, o_next), viz_frame
 
         init_carry = (r, f, o)
-        
-        # Scan returns history of all substeps for high-res visualization
         (final_r, final_f, final_o), stacked_viz_frames = jax.lax.scan(
             sub_step_fn, init_carry, None, length=Config.SIM_SUBSTEPS
         )
 
-        # Repack Batch
         r_b = jnp.expand_dims(final_r, 0)
         o_b = jax.tree.map(lambda x: jnp.expand_dims(x, 0), final_o)
         f_b = jax.tree.map(lambda x: jnp.expand_dims(x, 0), final_f)
@@ -250,51 +253,53 @@ class InferenceFlyEnv:
 # 4. MAIN SIMULATION LOOP
 # ==============================================================================
 def run_simulation(params):
-    """
-    Executes the main inference loop.
-    
-    Calculates control actions, steps the environment, and collects downsampled
-    data for visualization.
-    """
     print("--> Initializing Inference Environment...")
     env = InferenceFlyEnv()
-    rng = jax.random.PRNGKey(0)
+    
+    # Use a fixed seed for reproducibility, or random for variety
+    rng = jax.random.PRNGKey(int(time.time())) 
     
     state = env.reset(rng)
     
+    # --- EXTRACT SCALING FACTORS ---
+    # We grab the generated physics parameters to pass to the visualizer
+    phys_p_batch = state[3]
+    # Take index 0
+    p_single = jax.tree.map(lambda x: x[0], phys_p_batch)
+    
+    th_scale = float(p_single.thorax_mass_scale)
+    ab_scale = float(p_single.abd_mass_scale)
+    print(f"--> Randomization Applied:")
+    print(f"    Thorax Mass Scale: {th_scale:.3f}")
+    print(f"    Abd Mass Scale:    {ab_scale:.3f}")
+
     total_control_steps = int(Config.DURATION / (Config.DT * Config.SIM_SUBSTEPS))
     
-    vis_data = {'r': [], 'w': [], 'f': [], 't': [], 'p_force': [], 'p_torque': [], 'le': [], 'hinge': []}
+    # Add meta dict to vis_data
+    vis_data = {
+        'r': [], 'w': [], 'f': [], 't': [], 
+        'p_force': [], 'p_torque': [], 
+        'meta': {'th_scale': th_scale, 'ab_scale': ab_scale} # <--- STORE SCALES
+    }
     
     print(f"--> Simulating {Config.DURATION}s ({total_control_steps} control steps)...")
 
-    # Compile the ENTIRE step (Brain + Physics) into a single optimized function.
-    # This prevents JAX from re-compiling or leaking memory traces in the loop.
     @jax.jit
     def single_inference_step(curr_state, curr_params, ext_f, ext_t):
         r_state = curr_state[0]
-        
-        # 1. Prepare Observation
         wrapped_theta = jnp.mod(r_state[:, 2] + jnp.pi, 2 * jnp.pi) - jnp.pi
         obs_input = r_state.at[:, 2].set(wrapped_theta)
         scaled_input = symlog(obs_input)
-        
-        # 2. Run Policy
         mods, _, _ = ac_model.apply(curr_params, scaled_input)
-        
-        # 3. Run Environment
         next_state, frames = env.step(curr_state, mods, external_force=ext_f, external_torque=ext_t)
         return next_state, frames
     
     t_sim = 0.0
-    
-    # Warmup compilation (Critical to prevent lag on first frame)
-    print("--> Compiling JAX graph (this takes a few seconds)...")
+    print("--> Compiling JAX graph...")
     _ = single_inference_step(state, params, jnp.zeros(2), 0.0)
     print("--> Compilation Complete!")
 
     for i in range(total_control_steps):
-        # --- 1. Determine Perturbation ---
         ext_f = jnp.zeros(2)
         ext_t = 0.0
         
@@ -303,32 +308,22 @@ def run_simulation(params):
                 ext_f = Config.PERTURB_FORCE
                 ext_t = Config.PERTURB_TORQUE
         
-        # --- 2. Run JIT-compiled step ---
         state, stacked_frames = single_inference_step(state, params, ext_f, ext_t)
         
         s_r, s_w, s_f, s_le, s_hinge = stacked_frames
         
-        # --- 3. Global Skip Logic (Visualization Downsampling) ---
-        # Determines which frames to keep based on the global simulation time.
-        # This prevents the list from growing too large (OOM protection).
-        
         global_start_step = i * Config.SIM_SUBSTEPS
         batch_global_steps = np.arange(global_start_step, global_start_step + Config.SIM_SUBSTEPS)
-        
-        # Identify indices in this batch that match the skip frequency
         indices_to_keep = np.where(batch_global_steps % Config.VIZ_STEP_SKIP == 0)[0]
         
         if len(indices_to_keep) > 0:
             vis_data['r'].extend([np.array(s_r[j]) for j in indices_to_keep])
             vis_data['w'].extend([np.array(s_w[j]) for j in indices_to_keep])
             vis_data['f'].extend([np.array(s_f[j]) for j in indices_to_keep])
-            vis_data['le'].extend([np.array(s_le[j]) for j in indices_to_keep])
-            vis_data['hinge'].extend([np.array(s_hinge[j]) for j in indices_to_keep])
             
             step_times = [t_sim + (j+1)*Config.DT for j in indices_to_keep]
             vis_data['t'].extend(step_times)
             
-            # Log Perturbation Flags
             has_force = np.linalg.norm(ext_f) > 0
             has_torque = abs(ext_t) > 0
             vis_data['p_force'].extend([has_force] * len(indices_to_keep))
@@ -342,85 +337,82 @@ def run_simulation(params):
     return vis_data, env
 
 # ==============================================================================
-# 5. VISUALIZATION ENGINE
+# 5. VISUALIZATION ENGINE (With Adaptive Scaling)
 # ==============================================================================
 def generate_gif(data, env):
-    """
-    Renders the collected simulation data into a high-quality GIF.
-    Includes trajectory traces, wing motion blur, and perturbation indicators.
-    """
-    
-
-    print(f"--> Rendering High-Quality GIF ({len(data['r'])} frames collected)...")
+    print(f"--> Rendering Professional GIF ({len(data['r'])} frames collected)...")
     
     r_states = data['r']
     w_poses = data['w']
     times = data['t']
     flag_force = data['p_force']
     flag_torque = data['p_torque']
-    le_markers = data['le']
-    hinge_markers = data['hinge']
     
-    # --- PRE-CALCULATION: Body-Relative Wing History ---
-    # Convert global wing coordinates to local body coordinates.
+    # --- EXTRACT SCALES ---
+    # We use Cube Root scaling. If mass x2, Size x1.25.
+    # This prevents the fly from looking ridiculously huge/small.
+    th_scale_mass = data['meta']['th_scale']
+    ab_scale_mass = data['meta']['ab_scale']
+    
+    th_viz_scale = np.cbrt(th_scale_mass)
+    ab_viz_scale = np.cbrt(ab_scale_mass)
+    
+    # --- PRE-CALCULATION ---
     wing_rel_history = []
-    
     for i in range(len(r_states)):
         r, w = r_states[i], w_poses[i]
-        
-        # 1. Vector from Body Center to Wing Center (Global)
         dx_global = w[0] - r[0]
         dz_global = w[1] - r[1]
-        
-        # 2. Rotate into Body Frame (Remove Body Rotation)
         c, s = np.cos(-r[2]), np.sin(-r[2])
         x_local = dx_global * c - dz_global * s
         z_local = dx_global * s + dz_global * c
-        
         wing_rel_history.append([x_local, z_local])
-        
     wing_rel_history = np.array(wing_rel_history)
-    # ---------------------------------------------------------------
 
     fig, ax = plt.subplots(figsize=(10, 8), dpi=Config.DPI)
     ax.set_aspect('equal')
-    ax.set_facecolor('#f0f0f5')
-    ax.grid(True, color='white', linestyle='-', linewidth=1.5)
+    ax.set_facecolor('white')
+    ax.grid(True, color='#e0e0e0', linestyle='-', linewidth=1.0)
     
-    # --- Graphics Objects ---
-    traj_line, = ax.plot([], [], color='#555555', linestyle='--', linewidth=1.0, alpha=0.5)
-
-    # Wing Center Trajectory (Purple Trace)
-    wing_traj_line, = ax.plot([], [], color='purple', linestyle='-', linewidth=0.8, alpha=0.0, label='Wing Path')
+    traj_line, = ax.plot([], [], color='#808080', linestyle='-', linewidth=1.2, alpha=0.6)
+    wing_traj_line, = ax.plot([], [], color='#404040', linestyle='-', linewidth=1.0, alpha=0.8, label='Wing Path')
     
-    patch_thorax = patches.Ellipse((0,0), width=0.012, height=0.006, facecolor='#2c3e50', edgecolor='k', zorder=10)
-    patch_head = patches.Circle((0,0), radius=0.0025, facecolor='#e74c3c', edgecolor='k', zorder=10)
-    patch_abd = patches.Ellipse((0,0), width=0.018, height=0.008, facecolor='#f39c12', edgecolor='k', alpha=0.9, zorder=9)
+    # --- SCALED Body Parts ---
+    # Base dims: Thorax(0.012, 0.006), Head(0.0025), Abd(0.018, 0.008)
+    
+    patch_thorax = patches.Ellipse((0,0), 
+                                   width=0.012 * th_viz_scale, 
+                                   height=0.006 * th_viz_scale, 
+                                   facecolor='#404040', edgecolor='k', linewidth=1.2, zorder=10)
+    
+    patch_head = patches.Circle((0,0), 
+                                radius=0.0025 * th_viz_scale, # Head scales with Thorax
+                                facecolor='#b0b0b0', edgecolor='k', linewidth=1.2, zorder=10)
+    
+    patch_abd = patches.Ellipse((0,0), 
+                                width=0.018 * ab_viz_scale, 
+                                height=0.008 * ab_viz_scale, 
+                                facecolor='#707070', edgecolor='k', linewidth=1.2, alpha=0.9, zorder=9)
     
     ax.add_patch(patch_thorax)
     ax.add_patch(patch_head)
     ax.add_patch(patch_abd)
     
-    # Wing (Motion Blur effect using multiple alpha lines)
     wing_lines = []
-    alphas = [0.05, 0.1, 0.2, 1.0] 
-    for a in alphas:
-        wl, = ax.plot([], [], 'k-', linewidth=1.5, alpha=a, zorder=11)
+    shadow_alphas = np.linspace(0.02, 0.3, Config.N_SHADOW_WINGS)
+    all_alphas = np.concatenate([shadow_alphas, [1.0]])
+
+    for a in all_alphas:
+        lw = 1.5 if a == 1.0 else 1.2
+        col = 'k-' if a == 1.0 else '#202020'
+        wl, = ax.plot([], [], col, linestyle='-', linewidth=lw, alpha=a, zorder=11)
         wing_lines.append(wl)
-
-    patch_le = patches.Circle((0,0), radius=0.0015, color='red', zorder=15)
-    ax.add_patch(patch_le)
-
-    patch_hinge = patches.Circle((0,0), radius=0.0015, color='orange', zorder=15)
-    ax.add_patch(patch_hinge)
         
-    # --- Perturbation Indicators ---
-    arrow_force = patches.FancyArrow(0, 0, 0, 0, width=0.005, color='red', zorder=20, alpha=0.0)
+    arrow_force = patches.FancyArrow(0, 0, 0, 0, width=0.005, color='#c0392b', zorder=20, alpha=0.0)
     ax.add_patch(arrow_force)
     
-    text_torque = ax.text(0, 0, '', fontsize=30, color='orange', ha='center', va='center', fontweight='bold', zorder=20, alpha=0.0)
-    
-    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, fontweight='bold', family='monospace')
+    text_torque = ax.text(0, 0, '', fontsize=30, color='#d35400', ha='center', va='center', fontweight='bold', zorder=20, alpha=0.0)
+    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, fontweight='bold', family='monospace', color='k')
     txt_info = ax.text(0.05, 0.90, '', transform=ax.transAxes, fontsize=10, family='monospace', color='#333333')
     
     window_size = 0.25 
@@ -436,20 +428,16 @@ def generate_gif(data, env):
         return wing_x, wing_z
 
     def update(frame):
-        # Use frame index directly (data is already decimated via Skip Logic)
         idx = frame 
-        
         if idx >= len(r_states): return
         
         curr_r = r_states[idx]
         rx, rz = curr_r[0], curr_r[1]
         r_th, r_phi = curr_r[2], curr_r[3]
         
-        # --- Update Camera ---
         ax.set_xlim(0.0 - window_size, 0.0 + window_size)
         ax.set_ylim(0.0 - window_size, 0.0 + window_size)
         
-        # --- Update Body ---
         patch_thorax.set_center((rx, rz))
         patch_thorax.set_angle(np.degrees(r_th))
         
@@ -463,109 +451,73 @@ def generate_gif(data, env):
         patch_abd.set_center((joint_x - d2 * np.cos(abd_ang), joint_z - d2 * np.sin(abd_ang)))
         patch_abd.set_angle(np.degrees(abd_ang))
         
-        # --- Update Wings with Trail/Blur ---
-        for k in range(4):
-            # Scale the offset because data density changed.
-            # Previously: offset=3 frames. Now: 1 frame = 20*DT.
-            offset = 3-k 
+        num_total_wings = len(wing_lines)
+        for k in range(num_total_wings):
+            offset = (num_total_wings - 1) - k
             hist_idx = max(0, idx - offset)
             w_x, w_z = get_wing_coords(r_states[hist_idx], w_poses[hist_idx])
             wing_lines[k].set_data(w_x, w_z)
 
-        # --- Update Markers ---
-        le_pos = le_markers[idx]
-        patch_le.set_center((le_pos[0], le_pos[1]))
-
-        hinge_pos = hinge_markers[idx]
-        patch_hinge.set_center((hinge_pos[0], hinge_pos[1]))
-            
-        # --- Update Trajectory (Body) ---
         hist_len = 50 
         start_t = max(0, idx - hist_len)
         hist_x = [r[0] for r in r_states[start_t:idx]] 
         hist_z = [r[1] for r in r_states[start_t:idx]]
         traj_line.set_data(hist_x, hist_z)
 
-        # --- Update Trajectory (Wing Center) ---
-        wing_hist_len = 22
-        start_w = max(0, idx - wing_hist_len)
-
-        # 1. Get the chunk of relative history
+        start_w = max(0, idx - Config.TRACE_HIST_LEN)
         rel_chunk = wing_rel_history[start_w:idx]
         
         if len(rel_chunk) > 0:
-            # 2. Transform it to the CURRENT body pose
-            # Rot(theta) * local + Pos
             curr_c, curr_s = np.cos(r_th), np.sin(r_th)
-            
-            # Rotation
             traj_x = rel_chunk[:, 0] * curr_c - rel_chunk[:, 1] * curr_s
             traj_z = rel_chunk[:, 0] * curr_s + rel_chunk[:, 1] * curr_c
-            
-            # Translation
             traj_x += rx
             traj_z += rz
-            
             wing_traj_line.set_data(traj_x, traj_z)
         else:
             wing_traj_line.set_data([], [])
-        # ---------------------------------------------------
-        
-        # --- Visualize Kick (Perturbation) ---
+
         is_force = flag_force[idx]
         is_torque = flag_torque[idx]
         
         if is_force:
             arrow_force.set_alpha(1.0)
-
-            # 1. Get physics force direction
             fx, fz = Config.PERTURB_FORCE
-    
-            # 2. Normalize it to a fixed arrow length (e.g., 0.03m)
             mag = np.sqrt(fx**2 + fz**2) + 1e-6
             d_x = (fx / mag) * 0.03
             d_z = (fz / mag) * 0.03
-    
-            # 3. Position the tail "behind" the force so the tip hits the fly (rx, rz)
-            # We subtract the direction vector to find the tail position
-            start_x = rx - d_x * 1.5  # 1.5 is a spacing multiplier
+            start_x = rx - d_x * 1.5
             start_z = rz - d_z * 1.5
-    
             arrow_force.set_data(x=start_x, y=start_z, dx=d_x, dy=d_z)
-
         else:
             arrow_force.set_alpha(0.0)
             
         if is_torque:
             text_torque.set_alpha(1.0)
             text_torque.set_position((rx, rz + 0.02)) 
-
-            # Check the torque value from Config
             if Config.PERTURB_TORQUE > 0:
-                text_torque.set_text('⟲') # Pitch Up / Counter-Clockwise
+                text_torque.set_text('⟲')
             else:
-                text_torque.set_text('⟳') # Pitch Down / Clockwise
+                text_torque.set_text('⟳')
         else:
             text_torque.set_alpha(0.0)
             
         if is_force or is_torque:
-            txt_info.set_text(f"STATUS: !! KICK (F/T) !!")
-            txt_info.set_color('red')
+            txt_info.set_text(f"STATUS: !! PERTURBATION !!")
+            txt_info.set_color('#c0392b')
         else:
             txt_info.set_text(f"STATUS: STABLE HOVER")
-            txt_info.set_color('green')
+            txt_info.set_color('#27ae60')
             
         txt_time.set_text(f"T: {times[idx]:.4f}s")
-        
-        return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, arrow_force, text_torque, txt_time, txt_info, patch_le, patch_hinge] + wing_lines
+        return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, arrow_force, text_torque, txt_time, txt_info] + wing_lines
 
     num_frames = int(len(r_states))
+    ani = animation.FuncAnimation(fig, update, frames=num_frames, interval=800/Config.FPS, blit=True)
     
-    ani = animation.FuncAnimation(fig, update, frames=num_frames, interval=1000/Config.FPS, blit=True)
-    
-    out_name = "hornet_flight_inference.gif"
+    out_name = "hornet_flight_inference_pro.gif"
     print(f"--> Saving to {out_name}...")
-    ani.save(out_name, writer='pillow', fps=Config.FPS)
+    ani.save(out_name, writer='pillow', fps=Config.FPS, savefig_kwargs={'transparent': False})
     print("--> Done!")
     plt.close(fig)
 
@@ -577,57 +529,45 @@ if __name__ == "__main__":
     import glob
     import re
 
-    # Parse arguments for checkpoint selection
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to the .pkl checkpoint file")
     args = parser.parse_args()
 
     param_file = args.checkpoint
 
-    # Auto-detect latest checkpoint if none provided
     if param_file is None:
         default_dir = "checkpoints_shac"
         if os.path.exists(default_dir):
             files = glob.glob(os.path.join(default_dir, "*.pkl"))
             if files:
-                # Sort by iteration number in filename
                 files.sort(key=lambda f: int(re.sub(r'\D', '', f)) if re.search(r'\d', f) else 0)
                 param_file = files[-1]
                 print(f"--> Auto-detected latest checkpoint: {param_file}")
     
     if param_file is None or not os.path.exists(param_file):
         print(f"Error: Checkpoint file not found. Please provide one using --checkpoint")
-        print(f"Example: python -m hornet.inference_hornet --checkpoint my_params.pkl")
         exit(1)
         
     print(f"--> Loading parameters from {param_file}")
     with open(param_file, 'rb') as f:
         data = pickle.load(f)
 
-    # 1. Get raw params (Batch Size: 32)
     raw_params = data['params'] 
     
-    # 2. Check if PBT state exists to find the best agent
     if 'pbt_state' in data:
         pbt_state = data['pbt_state']
-        # Find index of agent with highest running reward
         best_idx = np.argmax(pbt_state.running_reward)
         print(f"--> PBT Detected. Selecting Best Agent: Index {best_idx}")
         print(f"    Score: {pbt_state.running_reward[best_idx]:.2f}")
-        print(f"    Weights: {pbt_state.weights[best_idx]}")
-        
-        # Extract specific index from the batch
         params = jax.tree.map(lambda x: x[best_idx], raw_params)
         
     else:
-        # Fallback: Just take the first one if no PBT state (or if it's a legacy checkpoint)
         print("--> No PBT state found. Using Agent 0.")
-        # Check if batched by looking at first leaf
         first_leaf = jax.tree_util.tree_leaves(raw_params)[0]
-        if len(first_leaf.shape) > 2: # Heuristic: Dense weights usually 2D, Batched is 3D
+        if len(first_leaf.shape) > 2: 
              params = jax.tree.map(lambda x: x[0], raw_params)
         else:
-             params = raw_params # It was already unbatched (e.g., single expert)
+             params = raw_params 
         
     sim_data, env = run_simulation(params)
     generate_gif(sim_data, env)
