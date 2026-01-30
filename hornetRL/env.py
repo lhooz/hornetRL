@@ -312,19 +312,26 @@ class FlyEnv:
         dist = jnp.sqrt(dist_sq + 1e-6)
 
         # --- 2. Precision Reward (The "Magnet") ---
-        # Replaces: w_pos * loss_pos (Cost) & Proximity Bonuses
         # Logic: 
         #   - At dist=0.0: Reward is Max (w_pos)
         #   - As dist grows: Reward decays smoothly to 0
         #   - Gradient is steepest near 0 (High Sensitivity)
         w_pos = reward_weights[:, 0]
-        precision_kernel = 1.0 / (1.0 + 10.0 * dist_sq)
+        precision_kernel = 1.0 / (1.0 + 100.0 * dist_sq)
         rew_precision = w_pos * precision_kernel
 
-        # --- 3. Safety Penalty (The "Electric Fence") ---
-        # Replaces: out_of_bounds_cost (jnp.where)
-        # Problem with old 'jnp.where': Gradient was 0.
-        # New 'ReLU': Creates a gradient that pushes the fly back as soon as it crosses 0.20m.
+        # --- 3. The "Nagger" (Linear/Integral-style Penalty) ---
+        # This penalizes X and Z errors individually using Absolute Value (L1 Norm).
+        # Nudge Weight
+        # If w_pos is ~200, this makes the penalty ~20 to 40 per meter.
+        w_nudge = 0.2 * w_pos 
+        
+        # Calculate |x| + |z|
+        linear_error = jnp.abs(err[:, 0]) + jnp.abs(err[:, 1])
+        rew_linear_nudge = -w_nudge * linear_error
+
+        # --- 4. Safety Penalty (The "Electric Fence") ---
+        # ReLU creates a gradient that pushes the fly back as soon as it crosses 0.20m.
         wall_limit = 0.20
         violation = jax.nn.relu(dist - wall_limit)
         
@@ -332,7 +339,7 @@ class FlyEnv:
         penalty_scale = 20.0 * w_pos # Multiplier
         rew_safety = -penalty_scale * violation
 
-        # --- 4. Other Dynamic Costs (Negative) ---
+        # --- 5. Other Dynamic Costs (Negative) ---
         # We assume these remaining weights are for Costs (penalties)
         w_th  = reward_weights[:, 1]
         w_ab  = reward_weights[:, 2]
@@ -354,12 +361,12 @@ class FlyEnv:
             w_eff * loss_eff
         )
 
-        # --- 5. Total Reward ---
+        # --- 6. Total Reward ---
         # FORMULA: Alive + Precision(Reward) + Safety(Penalty) - OtherCosts(Penalty)
         alive_reward = 0.0
         
-        raw_reward = alive_reward + rew_precision + rew_safety - cost_others
-        
+        raw_reward = alive_reward + rew_precision + rew_linear_nudge + rew_safety - cost_others        
+
         scaled_reward = raw_reward * 0.02 
         
         metrics = {
