@@ -49,10 +49,10 @@ class Config:
 
     # --- Time Scales ---
     DT = 3e-5               # Physics integration timestep (s)
-    SIM_SUBSTEPS = 40       # Physics steps per Control Step
+    SIM_SUBSTEPS = 72       # Physics steps per Control Step
                             # Effective Control Freq: ~1666 Hz (0.6ms)
                             
-    HORIZON = 64            # Trajectory horizon for Back-propagation Through Time (BPTT).
+    HORIZON = 35            # Trajectory horizon for Back-propagation Through Time (BPTT).
                             # Duration: ~0.038s (~4.4 wingbeats), sufficient for stability convergence.
     RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
     PBT_INTERVAL = 1000      # Evolution interval (Survival of the fittest)
@@ -149,7 +149,7 @@ def run_visualization(env, params, update_idx, vis_step_fn):
     print(f"--> Generatng Visualization for Step {update_idx}...")
 
     steps_per_frame = 1
-    total_visual_frames = Config.HORIZON * 4
+    total_visual_frames = Config.HORIZON * 5
 
     sim_data = {'states': [], 'wing_pose': [], 'nodal_forces': [], 'le_marker': [], 'hinge_marker': [], 't': []}
     
