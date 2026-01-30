@@ -43,7 +43,7 @@ class Config:
     FPS = 60             
     DPI = 100            
     
-    VIZ_STEP_SKIP = 40
+    VIZ_STEP_SKIP = 70
     TRACE_HIST_LEN = 15
     N_SHADOW_WINGS = 7 
     
