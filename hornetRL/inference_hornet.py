@@ -404,7 +404,7 @@ def generate_gif(data, env):
 
     for a in all_alphas:
         lw = 1.5 if a == 1.0 else 1.2
-        col = 'k-' if a == 1.0 else '#202020'
+        col = 'k' if a == 1.0 else '#202020'
         wl, = ax.plot([], [], col, linestyle='-', linewidth=lw, alpha=a, zorder=11)
         wing_lines.append(wl)
         
