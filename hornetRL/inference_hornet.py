@@ -309,7 +309,7 @@ def run_simulation(params, mode='nominal'):
         if len(matches) > 0:
             if mode == 'chaos':
                 for m in matches:
-                    r_snap = np.array(stacked_frames[m])
+                    r_snap = np.array(stacked_frames[m]) # [Batch, 8]
                     traj_history.append(r_snap)
             else:
                 s_r, s_w, s_f, _, _ = stacked_frames 
@@ -333,59 +333,76 @@ def run_simulation(params, mode='nominal'):
         return detailed_history, env
 
 # ==============================================================================
-# 5. VISUALIZATION A: CHAOS PLOT (With Size Scaling)
+# 5. VISUALIZATION A: SWARM TRAJECTORY GIF (Updated)
 # ==============================================================================
 def generate_chaos_plot(history, scales):
-    print("\n--> Generating Chaos Trajectory Plot...")
+    print("\n--> Rendering Swarm Trajectory GIF...")
     
-    # history is list of (Batch, 8) arrays
-    data = np.stack(history, axis=0) # Result: (Time, Batch, 8)
+    # history is list of (Batch, 8) arrays -> Stack to (Time, Batch, 8)
+    data = np.stack(history, axis=0) 
     num_steps, num_agents, _ = data.shape
     
-    fig, ax = plt.subplots(figsize=(10, 10), dpi=150)
+    # Calculate Dot Sizes based on Mass (Cube Root scaling for Area/Vol relation)
+    base_size = 45
+    viz_sizes = base_size * (scales ** (2/3)) 
+
+    # Setup Figure
+    fig, ax = plt.subplots(figsize=(10, 10), dpi=80) 
     ax.set_aspect('equal')
     ax.set_facecolor('white')
     ax.grid(True, color='#e0e0e0', linestyle='--', linewidth=0.5)
     
-    ax.scatter(0, 0, color='#27ae60', s=150, marker='+', zorder=10, label='Target', linewidth=2)
+    # Target
+    ax.axhline(0, color='#27ae60', alpha=0.3, lw=1)
+    ax.axvline(0, color='#27ae60', alpha=0.3, lw=1)
+    ax.scatter(0, 0, color='#27ae60', s=200, marker='+', zorder=5, lw=2)
     
-    # Calculate Dot Sizes based on Mass (Cube Root scaling)
-    # Norm scale 1.0 -> size 30. Scale 1.2 -> larger.
-    base_size = 35
-    viz_sizes = base_size * (scales ** (2/3)) # Surface area scaling for 2D dots
-    
-    for i in range(num_agents):
-        traj_x = data[:, i, 0]
-        traj_z = data[:, i, 1]
-        
-        # Use individual size
-        s_i = viz_sizes[i]
-        
-        ax.plot(traj_x, traj_z, color='black', alpha=0.15, linewidth=0.8)
-        ax.scatter(traj_x[0], traj_z[0], color='#e74c3c', s=s_i, marker='x', alpha=0.7)
-        ax.scatter(traj_x[-1], traj_z[-1], color='#3498db', s=s_i, marker='.', alpha=0.8)
-
-    ax.set_xlim(-0.25, 0.25)
-    ax.set_ylim(-0.25, 0.25)
+    # Limits
+    limit = 0.25
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(-limit, limit)
     ax.set_xlabel("X Position (m)")
     ax.set_ylabel("Z Position (m)")
-    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\nDot Size reflects Fly Mass (Randomized +/- 20%)")
+    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\nRandomized Mass, Initial Pos & Pitch")
     
-    legend_elements = [
-        Line2D([0], [0], marker='+', color='w', markeredgecolor='#27ae60', markersize=10, label='Target'),
-        Line2D([0], [0], marker='x', color='w', markeredgecolor='#e74c3c', markersize=8, label='Start'),
-        Line2D([0], [0], marker='.', color='w', markerfacecolor='#3498db', markersize=10, label='End'),
-        Line2D([0], [0], color='black', lw=1, alpha=0.3, label='Trajectory'),
-    ]
-    ax.legend(handles=legend_elements, loc='upper right')
+    # --- Animatable Objects ---
+    # 1. Heads: Scatter Plot (Variable sizes)
+    colors = plt.cm.viridis(np.linspace(0, 1, num_agents))
+    scatter = ax.scatter([], [], s=viz_sizes, c=colors, alpha=0.9, zorder=10, edgecolor='none')
     
-    out_name = "chaos_recovery_plot.png"
-    plt.savefig(out_name, bbox_inches='tight')
-    print(f"--> Saved Chaos Plot: {os.path.abspath(out_name)}")
+    # 2. Trails: Line Collection (One line per agent)
+    trails = [ax.plot([], [], color=c, alpha=0.25, lw=1.2)[0] for c in colors]
+
+    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, family='monospace')
+
+    def update(frame):
+        # Update Heads
+        current_pos = data[frame, :, :2] # [Batch, 2] -> (x, z)
+        scatter.set_offsets(current_pos)
+        
+        # Update Trails (Full history)
+        # To make it faster, we could limit history, but full history looks best for trajectory plots
+        for i, line in enumerate(trails):
+            hist_x = data[:frame+1, i, 0]
+            hist_z = data[:frame+1, i, 1]
+            line.set_data(hist_x, hist_z)
+            
+        txt_time.set_text(f"Step: {frame}/{num_steps}")
+        return [scatter, txt_time] + trails
+
+    ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=30, blit=True)
+    
+    out_name = "hornet_swarm_traj.gif"
+    print(f"--> Saving Swarm GIF to {out_name}...")
+    try:
+        ani.save(out_name, writer='pillow', fps=30)
+        print(f"--> Done! Saved: {out_name}")
+    except Exception as e:
+        print(f"--> Error: {e}")
     plt.close(fig)
 
 # ==============================================================================
-# 5. VISUALIZATION B: PROFESSIONAL GIF (Single Agent)
+# 5b. VISUALIZATION B: PROFESSIONAL GIF (Single Agent)
 # ==============================================================================
 def generate_gif(data, env):
     print(f"\n--> Rendering Professional GIF ({len(data['r'])} frames)...")
