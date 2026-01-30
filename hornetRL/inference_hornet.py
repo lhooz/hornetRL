@@ -40,7 +40,7 @@ class Config:
 
     # --- Simulation Settings ---
     DT = 3e-5             
-    SIM_SUBSTEPS = 20    # Physics integration steps per single Control step
+    SIM_SUBSTEPS = 40    # Physics integration steps per single Control step
     
     # --- Inference Settings ---
     DURATION = 1.0       # Total simulation time (seconds)

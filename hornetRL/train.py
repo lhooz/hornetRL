@@ -49,13 +49,13 @@ class Config:
 
     # --- Time Scales ---
     DT = 3e-5               # Physics integration timestep (s)
-    SIM_SUBSTEPS = 20       # Physics steps per Control Step
+    SIM_SUBSTEPS = 40       # Physics steps per Control Step
                             # Effective Control Freq: ~1666 Hz (0.6ms)
                             
     HORIZON = 64            # Trajectory horizon for Back-propagation Through Time (BPTT).
                             # Duration: ~0.038s (~4.4 wingbeats), sufficient for stability convergence.
     RESET_INTERVAL = 50     # Forced reset interval (epochs) to enforce takeoff robustness.
-    PBT_INTERVAL = 2000      # Evolution interval (Survival of the fittest)
+    PBT_INTERVAL = 1000      # Evolution interval (Survival of the fittest)
 
     BATCH_SIZE = 32          # Number of parallel environments
     LR_ACTOR = 5e-4         # Learning Rate
