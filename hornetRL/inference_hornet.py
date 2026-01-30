@@ -368,7 +368,7 @@ def generate_chaos_plot(history, scales):
     # --- Animatable Objects ---
     # 1. Heads: Scatter Plot (Variable sizes)
     colors = plt.cm.viridis(np.linspace(0, 1, num_agents))
-    scatter = ax.scatter([], [], s=viz_sizes, c=colors, alpha=0.9, zorder=10, edgecolor='none')
+    scatter = ax.scatter(data[0, :, 0], data[0, :, 1], s=viz_sizes, c=colors, alpha=0.9, zorder=10, edgecolor='none')
     
     # 2. Trails: Line Collection (One line per agent)
     trails = [ax.plot([], [], color=c, alpha=0.25, lw=1.2)[0] for c in colors]
@@ -519,7 +519,7 @@ def generate_gif(data, env):
         return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, arrow_force, text_torque, txt_time, txt_info] + wing_lines
 
     ani = animation.FuncAnimation(fig, update, frames=len(r_states), interval=800/Config.FPS, blit=True)
-    out_name = "hornet_flight_inference_pro.gif"
+    out_name = "hornet_flight_inference.gif"
     print(f"--> Saving to {out_name}...")
     try:
         ani.save(out_name, writer='pillow', fps=Config.FPS)
