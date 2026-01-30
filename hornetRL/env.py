@@ -323,8 +323,7 @@ class FlyEnv:
         # --- 3. The "Nagger" (Linear/Integral-style Penalty) ---
         # This penalizes X and Z errors individually using Absolute Value (L1 Norm).
         # Nudge Weight
-        # If w_pos is ~200, this makes the penalty ~20 to 40 per meter.
-        w_nudge = 0.2 * w_pos 
+        w_nudge = 1.0 * w_pos 
         
         # Calculate |x| + |z|
         linear_error = jnp.abs(err[:, 0]) + jnp.abs(err[:, 1])
