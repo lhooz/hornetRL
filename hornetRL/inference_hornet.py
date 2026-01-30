@@ -38,12 +38,12 @@ class Config:
     DURATION = 1.0       
     FPS = 60             
     DPI = 60             
-    VIZ_STEP_SKIP = 70
-    TRACE_HIST_LEN = 6   # ~1.5 wingbeats
+    VIZ_STEP_SKIP = 10
+    TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 7   
     
     # --- Mode 2: Chaos Plot Settings ---
-    CHAOS_BATCH_SIZE = 10
+    CHAOS_BATCH_SIZE = 20
     CHAOS_DURATION = 0.5 # Shorter time needed to see recovery
     
     # --- Physics Settings ---
@@ -128,9 +128,9 @@ class InferenceFlyEnv:
             h_x_noise = jax.random.uniform(k_hinge, (batch_size,), minval=-0.001, maxval=0.001)
             h_z_noise = jax.random.uniform(k_hinge, (batch_size,), minval=-0.001, maxval=0.001)
             st_ang_noise = jax.random.uniform(k_st, (batch_size,), minval=-0.08, maxval=0.08)
-            k_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
-            b_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
-            phi_eq_off = jax.random.uniform(k_joint, (batch_size,), minval=-0.17, maxval=0.17)
+            k_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.7, maxval=1.3)
+            b_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.7, maxval=1.3)
+            phi_eq_off = jax.random.uniform(k_joint, (batch_size,), minval=-0.1, maxval=0.1)
         else:
             mass_scale_th = jnp.ones(batch_size)
             mass_scale_ab = jnp.ones(batch_size)

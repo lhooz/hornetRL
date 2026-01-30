@@ -47,12 +47,12 @@ class FlyRobotPhysics:
         
         # --- Mass Properties (kg) ---
         # Scaled for a total mass of ~1.5g (Hornet scale)
-        self.m_thorax = 0.0008   # 0.8 grams      
-        self.m_abdomen = 0.0007  # 0.7 grams        
+        self.m_thorax = 0.001   # 1.0 grams      
+        self.m_abdomen = 0.0005  # 0.5 grams        
         
         # --- Inertia Tensor (kg*m^2) ---
-        self.I_thorax = 1.5e-8               
-        self.I_abdomen = 2.6e-8        
+        self.I_thorax = 1.8e-8               
+        self.I_abdomen = 1.8e-8        
         
         # Center of Mass distances from the joint
         self.d1 = self.L_thorax / 2.0 

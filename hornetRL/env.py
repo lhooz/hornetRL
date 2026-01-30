@@ -150,13 +150,13 @@ class FlyEnv:
         st_ang_noise = jax.random.uniform(k_st, (batch_size,), minval=-0.08, maxval=0.08)
 
         # E. Joint Stiffness/Damping (Tendon properties)
-        # Variance in tissue elasticity (+/- 50%)
-        k_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
-        b_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.5, maxval=1.5)
+        # Variance in tissue elasticity (+/- 30%)
+        k_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.7, maxval=1.3)
+        b_hinge_scale = jax.random.uniform(k_joint, (batch_size,), minval=0.7, maxval=1.3)
         
-        # Equilibrium Angle Noise (+/- 10 degrees)
+        # Equilibrium Angle Noise (+/- 6 degrees)
         # Simulates different "resting" postures for the abdomen
-        phi_eq_off = jax.random.uniform(k_joint, (batch_size,), minval=-0.17, maxval=0.17)
+        phi_eq_off = jax.random.uniform(k_joint, (batch_size,), minval=-0.1, maxval=0.1)
 
         # Pack into PhysParams NamedTuple (Vectorized)
         phys_params = PhysParams(
