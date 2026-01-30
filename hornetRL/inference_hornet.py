@@ -41,7 +41,7 @@ class Config:
     # --- Inference Settings ---
     DURATION = 1.0       
     FPS = 60             
-    DPI = 150            
+    DPI = 100            
     
     VIZ_STEP_SKIP = 40
     TRACE_HIST_LEN = 15
