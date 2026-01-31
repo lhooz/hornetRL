@@ -1,6 +1,6 @@
 # HornetRL: Differentiable Neuromechanical Flight Optimization
 
-**HornetRL** is a JAX-based computational framework for **aerial robophysics**. It unifies differentiable rigid-body dynamics, unsteady aerodynamics, and neuromorphic policy synthesis to generate robust flight behaviors for biomimetic insect models.
+**HornetRL** is a JAX-based computational framework for **aerial robophysics**. It unifies differentiable multi-body dynamics, unsteady aerodynamics, and neuromorphic policy synthesis to generate robust flight behaviors for biomimetic insect models.
 
 Key features include:
 * **Lyapunov-Stable Policy Architecture:** Uses Input Convex Neural Networks (ICNN) within an **IDA-PBC** framework to guarantee physical consistency and closed-loop stability.

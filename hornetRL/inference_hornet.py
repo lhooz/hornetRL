@@ -35,9 +35,9 @@ class Config:
     SIM_SUBSTEPS = 72
     
     # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 0.5       
+    DURATION = 0.6      
     FPS = 60             
-    DPI = 60             
+    DPI = 100            
     VIZ_STEP_SKIP = 10
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 14
@@ -50,7 +50,7 @@ class Config:
     USE_DOMAIN_RANDOMIZATION = True 
     PERTURBATION = True  
     PERTURB_TIME = 0.02  
-    PERTURB_FORCE = jnp.array([1.0, -1.4]) 
+    PERTURB_FORCE = jnp.array([1.5, -2.0]) 
     PERTURB_TORQUE = -0.003
 
 def symlog(x):
