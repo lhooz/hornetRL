@@ -34,11 +34,12 @@ class Config:
     DT = 3e-5             
     SIM_SUBSTEPS = 72
     
-    # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 0.6      
+    DURATION = 1.2      
     FPS = 60             
     DPI = 80            
-    VIZ_STEP_SKIP = 10
+    VIZ_STEP_SKIP = 50
+
+    # --- Mode 1: Nominal GIF Settings ---
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 14
     
@@ -337,14 +338,19 @@ def run_simulation(params, mode='nominal'):
 # ==============================================================================
 def generate_chaos_plot(history, scales):
     print("\n--> Rendering Swarm Trajectory GIF...")
-    
+
     # history is list of (Batch, 8) arrays -> Stack to (Time, Batch, 8)
     data = np.stack(history, axis=0) 
     num_steps, num_agents, _ = data.shape
+
+    # Calculate physical time for each frame
+    time_per_frame = Config.DT * Config.VIZ_STEP_SKIP
+    # Get mass range for the title
+    m_min, m_max = np.min(scales), np.max(scales)
     
     # Calculate Dot Sizes based on Mass (Cube Root scaling for Area/Vol relation)
     base_size = 45
-    viz_sizes = base_size * (scales ** (2/3)) 
+    viz_sizes = base_size * (scales ** 3)  # Cubic scaling dramatically separates sizes
 
     # Setup Figure
     fig, ax = plt.subplots(figsize=(10, 10), dpi=80) 
@@ -367,19 +373,31 @@ def generate_chaos_plot(history, scales):
     limit = 0.3
     ax.set_xlim(-limit, limit)
     ax.set_ylim(-limit, limit)
-    ax.set_xlabel("X Position (m)")
-    ax.set_ylabel("Z Position (m)")
-    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\nRandomized Mass, Initial Pos & Pitch")
+    ax.set_xlabel("X Position (m)", fontsize=10, fontweight='bold')
+    ax.set_ylabel("Z Position (m)", fontsize=10, fontweight='bold')
+    # Title with Mass Range
+    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\n"
+                 f"Mass Variability: [{m_min:.2f}M - {m_max:.2f}M] | Initial Pos & Pitch", 
+                 fontsize=12, pad=15, fontweight='bold')
     
     # --- Animatable Objects ---
     # 1. Heads: Scatter Plot (Variable sizes)
     colors = plt.cm.viridis(np.linspace(0, 1, num_agents))
-    scatter = ax.scatter(data[0, :, 0], data[0, :, 1], s=viz_sizes, c=colors, alpha=0.9, zorder=10, edgecolor='none')
+    scatter = ax.scatter(data[0, :, 0], data[0, :, 1], 
+                         s=viz_sizes,       # Applying the magnified sizes
+                         c=colors, 
+                         alpha=0.85, 
+                         zorder=10, 
+                         edgecolors='#2c3e50', # Dark blue-gray edge for "Academic" look
+                         linewidths=0.5)
     
     # 2. Trails: Line Collection (One line per agent)
-    trails = [ax.plot([], [], color=c, alpha=0.25, lw=1.2)[0] for c in colors]
+    trails = [ax.plot([], [], color=c, alpha=0.15, lw=1.0)[0] for c in colors]
 
-    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, family='monospace')
+    # Monospaced Time Text
+    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, 
+                       fontsize=11, family='monospace', fontweight='bold',
+                       bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
 
     def update(frame):
         # Update Heads
@@ -393,7 +411,9 @@ def generate_chaos_plot(history, scales):
             hist_z = data[:frame+1, i, 1]
             line.set_data(hist_x, hist_z)
             
-        txt_time.set_text(f"Step: {frame}/{num_steps}")
+        # Physical Time Display
+        current_time = frame * time_per_frame
+        txt_time.set_text(f"TIME: {current_time:.3f}s")
         return [scatter, txt_time, target_zone] + trails
 
     ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=30, blit=True)
