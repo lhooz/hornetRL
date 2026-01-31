@@ -76,12 +76,12 @@ class Config:
     # --- PBT Hyperparameters ---
     # Initial Reward Weights, act as the "center" of the search distribution.
     PBT_BASE_WEIGHTS = jnp.array([
-        200.0,    # Pos (The "Pot of Gold" max value)
+        400.0,    # Pos (The "Pot of Gold" max value)
         10.0,     # Th_Ang (Orientation penalty)
         4.0,     # Ab_Ang (Abdomen stability)
         0.1,     # Lin_Vel (Drift damping)
-        0.05,     # Ang_Vel (Vibration damping)
-        1.0      # Eff (Force efficiency)
+        0.02,     # Ang_Vel (Vibration damping)
+        0.5      # Eff (Force efficiency)
     ])
     
     # Evolution Dynamics
