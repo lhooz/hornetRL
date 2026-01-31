@@ -32,25 +32,25 @@ class Config:
 
     # --- Simulation Settings ---
     DT = 3e-5             
-    SIM_SUBSTEPS = 72    
+    SIM_SUBSTEPS = 72
     
     # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 1.0       
+    DURATION = 0.5       
     FPS = 60             
     DPI = 60             
     VIZ_STEP_SKIP = 10
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
-    N_SHADOW_WINGS = 7   
+    N_SHADOW_WINGS = 14
     
     # --- Mode 2: Chaos Plot Settings ---
     CHAOS_BATCH_SIZE = 20
-    CHAOS_DURATION = 0.5 # Shorter time needed to see recovery
+    CHAOS_DURATION = 0.5
     
     # --- Physics Settings ---
     USE_DOMAIN_RANDOMIZATION = True 
     PERTURBATION = True  
     PERTURB_TIME = 0.02  
-    PERTURB_FORCE = jnp.array([0.9, -1.2]) 
+    PERTURB_FORCE = jnp.array([1.0, -1.4]) 
     PERTURB_TORQUE = -0.003
 
 def symlog(x):
@@ -91,7 +91,7 @@ class InferenceFlyEnv:
             k_theta, k_phi = jax.random.split(k2_c)
             
             # Position: Wide window (+/- 15cm)
-            q_pos = jax.random.uniform(k1_c, (batch_size, 2), minval=-0.15, maxval=0.15)
+            q_pos = jax.random.uniform(k1_c, (batch_size, 2), minval=-0.25, maxval=0.25)
             
             # Pitch: Random range (-1.5 to 1.5) + Offset 1.0 -> Range (-0.5 to 2.5)
             theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-1.5, maxval=1.5)
@@ -333,7 +333,7 @@ def run_simulation(params, mode='nominal'):
         return detailed_history, env
 
 # ==============================================================================
-# 5. VISUALIZATION A: SWARM TRAJECTORY GIF (Updated)
+# 5. VISUALIZATION A: SWARM TRAJECTORY GIF
 # ==============================================================================
 def generate_chaos_plot(history, scales):
     print("\n--> Rendering Swarm Trajectory GIF...")
@@ -352,13 +352,19 @@ def generate_chaos_plot(history, scales):
     ax.set_facecolor('white')
     ax.grid(True, color='#e0e0e0', linestyle='--', linewidth=0.5)
     
+    # --- Target Zone (1cm Radius) ---
+    # Professional style: subtle green fill with dashed boundary
+    target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.15, 
+                                 edgecolor='#27ae60', linestyle='--', linewidth=1.5, zorder=1)
+    ax.add_patch(target_zone)
+
     # Target
     ax.axhline(0, color='#27ae60', alpha=0.3, lw=1)
     ax.axvline(0, color='#27ae60', alpha=0.3, lw=1)
     ax.scatter(0, 0, color='#27ae60', s=200, marker='+', zorder=5, lw=2)
     
     # Limits
-    limit = 0.25
+    limit = 0.3
     ax.set_xlim(-limit, limit)
     ax.set_ylim(-limit, limit)
     ax.set_xlabel("X Position (m)")
@@ -388,7 +394,7 @@ def generate_chaos_plot(history, scales):
             line.set_data(hist_x, hist_z)
             
         txt_time.set_text(f"Step: {frame}/{num_steps}")
-        return [scatter, txt_time] + trails
+        return [scatter, txt_time, target_zone] + trails
 
     ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=30, blit=True)
     
@@ -430,13 +436,30 @@ def generate_gif(data, env):
     ax.set_aspect('equal')
     ax.set_facecolor('white')
     ax.grid(True, color='#e0e0e0', linestyle='-', linewidth=1.0)
+
+    # --- 1.Target Zone ---
+    target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.1, 
+                                 edgecolor='#27ae60', linestyle='--', linewidth=1.2, 
+                                 zorder=1, label='Target Zone (1cm)')
+    ax.add_patch(target_zone)
     
-    traj_line, = ax.plot([], [], color='#95a5a6', linestyle='--', linewidth=1.5, alpha=0.8, label='CoM Path')
-    wing_traj_line, = ax.plot([], [], color='#2c3e50', linestyle='-', linewidth=1.2, alpha=0.9, label='Wing Path')
+    # --- 2.Trajectory Lines ---
+    # CoM: Neutral Gray, Dashed
+    traj_line, = ax.plot([], [], color='#7f8c8d', linestyle='--', linewidth=1.5, alpha=0.8, label='CoM Trajectory')
     
-    patch_thorax = patches.Ellipse((0,0), width=0.012*th_viz_scale, height=0.006*th_viz_scale, facecolor='#404040', edgecolor='none', zorder=10)
-    patch_head = patches.Circle((0,0), radius=0.0025*th_viz_scale, facecolor='#b0b0b0', edgecolor='none', zorder=10)
-    patch_abd = patches.Ellipse((0,0), width=0.018*ab_viz_scale, height=0.008*ab_viz_scale, facecolor='#707070', edgecolor='none', alpha=0.9, zorder=9)
+    # Wingtip: Deep Purple (High contrast), Solid
+    wing_traj_line, = ax.plot([], [], color='#8e44ad', linestyle='-', linewidth=1.5, alpha=0.9, label='Wingtip Trace')
+    
+    # --- 3.Body Patches (Added Outlines) ---
+    # Edgecolor='#202020',linewidth=0.8
+    patch_thorax = patches.Ellipse((0,0), width=0.012*th_viz_scale, height=0.006*th_viz_scale, 
+                                   facecolor='#404040', edgecolor='#202020', linewidth=0.8, zorder=10)
+    
+    patch_head = patches.Circle((0,0), radius=0.0025*th_viz_scale, 
+                                facecolor='#b0b0b0', edgecolor='#202020', linewidth=0.8, zorder=10)
+    
+    patch_abd = patches.Ellipse((0,0), width=0.018*ab_viz_scale, height=0.008*ab_viz_scale, 
+                                facecolor='#707070', edgecolor='#202020', linewidth=0.8, alpha=0.9, zorder=9)
     
     ax.add_patch(patch_thorax); ax.add_patch(patch_head); ax.add_patch(patch_abd)
     
@@ -455,7 +478,7 @@ def generate_gif(data, env):
     txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, fontweight='bold', family='monospace', color='k')
     txt_info = ax.text(0.05, 0.90, '', transform=ax.transAxes, fontsize=10, family='monospace', color='#333333')
     
-    window_size = 0.25 
+    window_size = 0.3
     def get_wing_coords(r_pos, w_pose):
         wx, wz, wang = w_pose
         wing_len = env.phys.fluid.WING_LEN
@@ -465,6 +488,10 @@ def generate_gif(data, env):
         wing_x = wx + x_local * c_w
         wing_z = wz + x_local * s_w
         return wing_x, wing_z
+
+    leg = ax.legend(loc='upper right', fontsize=9, framealpha=0.9, 
+                    edgecolor='#cccccc', shadow=False)
+    leg.set_zorder(100)
 
     def update(frame):
         idx = frame
@@ -511,12 +538,12 @@ def generate_gif(data, env):
         else: text_torque.set_alpha(0.0)
         
         if is_force or is_torque:
-            txt_info.set_text("STATUS: !! PERTURBATION !!"); txt_info.set_color('#c0392b')
+            txt_info.set_text("STATUS: !! GUST !!"); txt_info.set_color('#c0392b')
         else:
             txt_info.set_text("STATUS: STABLE HOVER"); txt_info.set_color('#27ae60')
             
         txt_time.set_text(f"T: {times[idx]:.4f}s")
-        return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, arrow_force, text_torque, txt_time, txt_info] + wing_lines
+        return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, arrow_force, text_torque, txt_time, txt_info, leg, target_zone] + wing_lines
 
     ani = animation.FuncAnimation(fig, update, frames=len(r_states), interval=800/Config.FPS, blit=True)
     out_name = "hornet_flight_inference.gif"

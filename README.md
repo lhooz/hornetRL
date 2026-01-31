@@ -1,4 +1,4 @@
-# HornetRL: Differentiable Neuromechanical Flight Synthesis
+# HornetRL: Differentiable Neuromechanical Flight Optimization
 
 **HornetRL** is a JAX-based computational framework for **aerial robophysics**. It unifies differentiable rigid-body dynamics, unsteady aerodynamics, and neuromorphic policy synthesis to generate robust flight behaviors for biomimetic insect models.
 
@@ -6,7 +6,7 @@ Key features include:
 * **Lyapunov-Stable Policy Architecture:** Uses Input Convex Neural Networks (ICNN) within an **IDA-PBC** framework to guarantee physical consistency and closed-loop stability.
 * **Differentiable Neuromuscular Interface:** A Central Pattern Generator (CPG) that maps neural commands to wing kinematics using **analytic Jacobians** (via `jax.jacfwd`).
 * **Hybrid Dynamics Simulation:** Couples Port-Hamiltonian Multi-body dynamics with a data-driven fluid surrogate, utilizing **adaptive time-dilation** to reconcile training vs. physics timescales.
-* **Differentiable Trajectory Optimization:** Implements Short-Horizon Actor-Critic (SHAC) to backpropagate gradients directly through the physical rollout.
+* **Differentiable Trajectory Optimization:** Implements Short-Horizon Actor-Critic (SHAC) for analytical gradients backpropagation.
 * **Evolutionary Curriculum:** Integrated Population Based Training (PBT) automatically evolves reward manifolds to dynamically balance competing objectives.
 * **Sim-to-Real Robustness:** Implements **Domain Randomization** across inertial properties, geometric tolerances, and actuation dynamics, enhancing policy resilience against unmodeled dynamics and parameter variability.
 
@@ -100,7 +100,7 @@ To visualize a trained policy, run the inference module.
 python -m hornetRL.inference_hornet --checkpoint checkpoints_shac/shac_params_1000.pkl
 
 ```
-This will generate a high-resolution `.gif` showcasing the **multi-body kinematic chain** (Thorax $\to$ Head $\to$ Abdomen) and the **wing motion trace**, alongside the **gust recovery maneuver**.
+This will generate a high-resolution `.gif` showcasing the **articulated Thorax-Abdomen dynamics** and the **wing motion trace**, alongside the **gust recovery maneuver**.
 
 If you do not provide a checkpoint, it will attempt to find the latest one in the default `checkpoints_shac/` folder.
 
@@ -137,8 +137,8 @@ If you use this project in your research, please cite it using the following Bib
 ```bibtex
 @software{HornetRL2026,
   author = {Li, Hao},
-  title = {HornetRL: Differentiable Neuromechanical Flight Synthesis},
-  version = {0.1.0},
+  title = {HornetRL: Differentiable Neuromechanical Flight Optimization},
+  version = {0.2.0},
   year = {2026},
   url = {https://github.com/lhooz/hornetRL}
 }

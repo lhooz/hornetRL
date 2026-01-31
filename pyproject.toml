@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hornetRL"
-version = "0.1.1"
-description = "JAX-based RL framework for robophysical hornets using SHAC and Neural IDA-PBC"
+version = "0.2.0"
+description = "Differentiable neuromechanical flight optimization for bio-inspired aerial robots."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-  { name = "HaoLi", email = "haoli26@buaa.edu.cn" },
+  { name = "Hao Li", email = "haoli26@buaa.edu.cn" },
 ]
 
 dependencies = [
