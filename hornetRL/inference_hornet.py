@@ -34,18 +34,18 @@ class Config:
     DT = 3e-5             
     SIM_SUBSTEPS = 72
     
-    DURATION = 1.2      
     FPS = 60             
     DPI = 80            
     VIZ_STEP_SKIP = 50
 
     # --- Mode 1: Nominal GIF Settings ---
+    DURATION = 0.6   
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 14
     
     # --- Mode 2: Chaos Plot Settings ---
+    CHAOS_DURATION = 1.2
     CHAOS_BATCH_SIZE = 20
-    CHAOS_DURATION = 0.5
     
     # --- Physics Settings ---
     USE_DOMAIN_RANDOMIZATION = True 
