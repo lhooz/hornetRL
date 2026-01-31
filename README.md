@@ -1,5 +1,10 @@
 # HornetRL: Differentiable Neuromechanical Flight Optimization
 
+| **Single-Agent Gust Recovery** | **Swarm Morphological Robustness** |
+| :---: | :---: |
+| ![Single Agent](images/single_agent_gust_recovery.gif) | ![Swarm Traj](images/hornet_swarm_traj.gif) |
+| *Real-time visualization of articulated thorax-abdomen dynamics and wingbeat traces (purple). Re-stabilizes from a discrete gust within 150ms.* | *Convergence of $N=20$ agents with randomized mass $[0.8M - 1.2M]$ and initial pitch to a 1cm target zone.* |
+
 **HornetRL** is a JAX-based computational framework for **aerial robophysics**. It unifies differentiable multi-body dynamics, unsteady aerodynamics, and neuromorphic policy synthesis to generate robust flight behaviors for biomimetic insect models.
 
 Key features include:
