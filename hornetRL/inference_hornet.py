@@ -37,7 +37,7 @@ class Config:
     # --- Mode 1: Nominal GIF Settings ---
     DURATION = 0.6      
     FPS = 60             
-    DPI = 100            
+    DPI = 80            
     VIZ_STEP_SKIP = 10
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 14
@@ -50,7 +50,7 @@ class Config:
     USE_DOMAIN_RANDOMIZATION = True 
     PERTURBATION = True  
     PERTURB_TIME = 0.02  
-    PERTURB_FORCE = jnp.array([1.5, -2.0]) 
+    PERTURB_FORCE = jnp.array([1.0, -1.5]) 
     PERTURB_TORQUE = -0.003
 
 def symlog(x):
@@ -445,10 +445,10 @@ def generate_gif(data, env):
     
     # --- 2.Trajectory Lines ---
     # CoM: Neutral Gray, Dashed
-    traj_line, = ax.plot([], [], color='#7f8c8d', linestyle='--', linewidth=1.5, alpha=0.8, label='CoM Trajectory')
+    traj_line, = ax.plot([], [], color='#7f8c8d', linestyle='--', linewidth=1.0, alpha=0.8, label='CoM Trajectory')
     
     # Wingtip: Deep Purple (High contrast), Solid
-    wing_traj_line, = ax.plot([], [], color='#8e44ad', linestyle='-', linewidth=1.5, alpha=0.9, label='Wingtip Trace')
+    wing_traj_line, = ax.plot([], [], color='#8e44ad', linestyle='-', linewidth=1.0, alpha=0.9, label='Wingtip Trace')
     
     # --- 3.Body Patches (Added Outlines) ---
     # Edgecolor='#202020',linewidth=0.8
@@ -516,7 +516,7 @@ def generate_gif(data, env):
             w_x, w_z = get_wing_coords(r_states[hist_idx], w_poses[hist_idx])
             wing_lines[k].set_data(w_x, w_z)
 
-        hist_len = 50; start_t = max(0, idx - hist_len)
+        hist_len = 120; start_t = max(0, idx - hist_len)
         traj_line.set_data([r[0] for r in r_states[start_t:idx]], [r[1] for r in r_states[start_t:idx]])
 
         start_w = max(0, idx - Config.TRACE_HIST_LEN); rel_chunk = wing_rel_history[start_w:idx]
