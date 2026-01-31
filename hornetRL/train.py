@@ -78,9 +78,9 @@ class Config:
     PBT_BASE_WEIGHTS = jnp.array([
         200.0,    # Pos (The "Pot of Gold" max value)
         10.0,     # Th_Ang (Orientation penalty)
-        2.0,     # Ab_Ang (Abdomen stability)
+        4.0,     # Ab_Ang (Abdomen stability)
         0.1,     # Lin_Vel (Drift damping)
-        0.1,     # Ang_Vel (Vibration damping)
+        0.05,     # Ang_Vel (Vibration damping)
         1.0      # Eff (Force efficiency)
     ])
     
