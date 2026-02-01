@@ -36,7 +36,7 @@ class Config:
     
     FPS = 60 
     DPI = 80
-    VIZ_STEP_SKIP = 50
+    VIZ_STEP_SKIP = 10
 
     # --- Mode 1: Nominal GIF Settings ---
     DURATION = 0.6
