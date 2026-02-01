@@ -3,7 +3,7 @@
 | **Single-Agent Gust Recovery** | **Heterogeneous Swarm Robustness** |
 | :---: | :---: |
 | <img src="images/single_agent_gust_recovery.gif" width="375"> | <img src="images/hornet_swarm_traj.gif" width="375"> |
-| *Neuromorphic stabilization of articulated thorax-abdomen dynamics. The agent recovers from a discrete gust; purple lines visualize high-frequency wing kinematics.* | *Robust convergence of $N=20$ agent swarm to a 1cm target area. Policy generalizes across randomized mass $[0.8M - 1.2M]$, **actuator stiffness**, **geometric tolerances**, and **initial attitudes**.* |
+| *Neuromorphic stabilization of articulated thorax-abdomen dynamics. The agent recovers from a discrete gust; purple traces visualize high-frequency wingtip trajectory.* | *Robust convergence of a heterogeneous swarm (*N*=20) to a 1 cm target. Policy generalizes across randomized mass [0.8*M* – 1.2*M*], **actuator stiffness**, **geometric tolerances**, and **initial attitudes**.* |
 
 **HornetRL** is a JAX-based computational framework for **aerial robophysics**. It unifies differentiable multi-body dynamics, unsteady aerodynamics, and neuromorphic policy synthesis to generate robust flight behaviors for biomimetic insect models.
 
