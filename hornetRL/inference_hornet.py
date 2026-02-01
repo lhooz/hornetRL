@@ -36,12 +36,12 @@ class Config:
     
     FPS = 60 
     DPI = 80
-    VIZ_STEP_SKIP = 10
+    VIZ_STEP_SKIP = 20
 
     # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 0.6
-    TRACE_HIST_LEN = 40   # ~1.5 wingbeats
-    N_SHADOW_WINGS = 14
+    DURATION = 1.2
+    TRACE_HIST_LEN = 20   # ~1.5 wingbeats
+    N_SHADOW_WINGS = 10
     
     # --- Mode 2: Chaos Plot Settings ---
     CHAOS_DURATION = 1.2
