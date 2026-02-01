@@ -95,7 +95,7 @@ class InferenceFlyEnv:
             q_pos = jax.random.uniform(k1_c, (batch_size, 2), minval=-0.25, maxval=0.25)
             
             # Pitch: Random range
-            theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-2.0, maxval=2.0)
+            theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-1.6, maxval=1.6)
             theta_chaos = theta_chaos + 1.0
             
             # Abdomen: Random range
