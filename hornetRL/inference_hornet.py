@@ -39,9 +39,9 @@ class Config:
     VIZ_STEP_SKIP = 20
 
     # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 1.2
+    DURATION = 0.8
     TRACE_HIST_LEN = 20   # ~1.5 wingbeats
-    N_SHADOW_WINGS = 10
+    N_SHADOW_WINGS = 7
     
     # --- Mode 2: Chaos Plot Settings ---
     CHAOS_DURATION = 1.2
