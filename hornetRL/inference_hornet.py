@@ -35,8 +35,8 @@ class Config:
     SIM_SUBSTEPS = 72
     
     FPS = 60 
-    DPI = 80
-    VIZ_STEP_SKIP = 20
+    DPI = 60
+    VIZ_STEP_SKIP = 60
 
     # --- Mode 1: Nominal GIF Settings ---
     DURATION = 0.8
