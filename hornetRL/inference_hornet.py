@@ -34,17 +34,17 @@ class Config:
     DT = 3e-5             
     SIM_SUBSTEPS = 72
     
-    FPS = 60             
-    DPI = 80            
+    FPS = 60 
+    DPI = 80
     VIZ_STEP_SKIP = 10
 
     # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 0.1  
+    DURATION = 0.6
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 14
     
     # --- Mode 2: Chaos Plot Settings ---
-    CHAOS_DURATION = 0.2
+    CHAOS_DURATION = 1.2
     CHAOS_BATCH_SIZE = 20
     
     # --- Physics Settings ---
@@ -95,7 +95,7 @@ class InferenceFlyEnv:
             q_pos = jax.random.uniform(k1_c, (batch_size, 2), minval=-0.25, maxval=0.25)
             
             # Pitch: Random range
-            theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-2.5, maxval=2.5)
+            theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-2.0, maxval=2.0)
             theta_chaos = theta_chaos + 1.0
             
             # Abdomen: Random range
