@@ -36,15 +36,15 @@ class Config:
     
     FPS = 60             
     DPI = 80            
-    VIZ_STEP_SKIP = 50
+    VIZ_STEP_SKIP = 10
 
     # --- Mode 1: Nominal GIF Settings ---
-    DURATION = 0.6   
+    DURATION = 0.1  
     TRACE_HIST_LEN = 40   # ~1.5 wingbeats
     N_SHADOW_WINGS = 14
     
     # --- Mode 2: Chaos Plot Settings ---
-    CHAOS_DURATION = 1.2
+    CHAOS_DURATION = 0.2
     CHAOS_BATCH_SIZE = 20
     
     # --- Physics Settings ---
@@ -339,82 +339,77 @@ def run_simulation(params, mode='nominal'):
 def generate_chaos_plot(history, scales):
     print("\n--> Rendering Swarm Trajectory GIF...")
 
-    # history is list of (Batch, 8) arrays -> Stack to (Time, Batch, 8)
+    # Data Prep
     data = np.stack(history, axis=0) 
     num_steps, num_agents, _ = data.shape
-
-    # Calculate physical time for each frame
     time_per_frame = Config.DT * Config.VIZ_STEP_SKIP
-    # Get mass range for the title
     m_min, m_max = np.min(scales), np.max(scales)
     
-    # Calculate Dot Sizes based on Mass (Cube Root scaling for Area/Vol relation)
+    # Magnified sizes for visual clarity (Cubic scaling)
     base_size = 45
-    viz_sizes = base_size * (scales ** 3)  # Cubic scaling dramatically separates sizes
+    viz_sizes = base_size * (scales ** 3)
 
-    # Setup Figure
-    fig, ax = plt.subplots(figsize=(10, 10), dpi=80) 
+    # --- 1. SETUP: Identical Geometry to Single Agent ---
+    dark_bg = '#1a1a1a'
+    fig, ax = plt.subplots(figsize=(10, 10), dpi=Config.DPI, facecolor=dark_bg) 
+    # This specific adjustment ensures the plot box is the exact same pixel size in both GIFs
+    fig.subplots_adjust(left=0.08, right=0.95, bottom=0.08, top=0.90) 
     ax.set_aspect('equal')
-    ax.set_facecolor('white')
-    ax.grid(True, color='#e0e0e0', linestyle='--', linewidth=0.5)
+    ax.set_facecolor(dark_bg)
+    ax.grid(True, color='#333333', linestyle='--', linewidth=0.5)
     
-    # --- Target Zone (1cm Radius) ---
-    # Professional style: subtle green fill with dashed boundary
-    target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.15, 
-                                 edgecolor='#27ae60', linestyle='--', linewidth=1.5, zorder=1)
-    ax.add_patch(target_zone)
-
-    # Target
-    ax.axhline(0, color='#27ae60', alpha=0.3, lw=1)
-    ax.axvline(0, color='#27ae60', alpha=0.3, lw=1)
-    ax.scatter(0, 0, color='#27ae60', s=200, marker='+', zorder=5, lw=2)
+    # --- 2. STYLING: Dark Theme & Limits ---
+    for spine in ax.spines.values(): spine.set_color('#555555')
+    ax.tick_params(colors='#888888', labelsize=8)
     
-    # Limits
+    # Limits (Swarm covers more area, so 0.3 is appropriate vs 0.2 for single)
     limit = 0.3
     ax.set_xlim(-limit, limit)
     ax.set_ylim(-limit, limit)
-    ax.set_xlabel("X Position (m)", fontsize=10, fontweight='bold')
-    ax.set_ylabel("Z Position (m)", fontsize=10, fontweight='bold')
-    # Title with Mass Range
+    
+    # Labels & Title
+    ax.set_xlabel("X Position (m)", color='#aaaaaa', fontsize=10, fontweight='bold')
+    ax.set_ylabel("Z Position (m)", color='#aaaaaa', fontsize=10, fontweight='bold')
     ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\n"
-                 f"Mass Variability: [{m_min:.2f}M - {m_max:.2f}M] | Initial Pos & Pitch", 
-                 fontsize=12, pad=15, fontweight='bold')
-    
-    # --- Animatable Objects ---
-    # 1. Heads: Scatter Plot (Variable sizes)
-    colors = plt.cm.viridis(np.linspace(0, 1, num_agents))
-    scatter = ax.scatter(data[0, :, 0], data[0, :, 1], 
-                         s=viz_sizes,       # Applying the magnified sizes
-                         c=colors, 
-                         alpha=0.85, 
-                         zorder=10, 
-                         edgecolors='#2c3e50', # Dark blue-gray edge for "Academic" look
-                         linewidths=0.5)
-    
-    # 2. Trails: Line Collection (One line per agent)
-    trails = [ax.plot([], [], color=c, alpha=0.15, lw=1.0)[0] for c in colors]
+                 f"Mass Variability: [{m_min:.2f}M - {m_max:.2f}M]", 
+                 color='white', fontsize=12, pad=10, fontweight='bold')
 
-    # Monospaced Time Text
-    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, 
-                       fontsize=11, family='monospace', fontweight='bold',
-                       bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+    # --- 3. OBJECTS ---
+    # Target Zone (Circle)
+    target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.1, 
+                                 edgecolor='#27ae60', linestyle='--', linewidth=1.5, zorder=1)
+    ax.add_patch(target_zone)
+    
+    # Target Crosshair (Assign to variable for blitting)
+    target_cross = ax.scatter(0, 0, color='#2ecc71', s=100, marker='+', zorder=5, lw=1.5, alpha=0.8)
+    
+    # Agents (Viridis colormap pops against dark bg)
+    colors = plt.cm.viridis(np.linspace(0, 1, num_agents)) 
+    scatter = ax.scatter(data[0, :, 0], data[0, :, 1], s=viz_sizes, c=colors, 
+                         alpha=0.85, zorder=10, edgecolors='#2c3e50', linewidths=0.5)
+    
+    # Trails (Low alpha for "flow" effect)
+    trails = [ax.plot([], [], color=c, alpha=0.3, lw=0.8)[0] for c in colors] 
+
+    # Time Text
+    txt_time = ax.text(0.05, 0.93, '', transform=ax.transAxes, 
+                       fontsize=11, family='monospace', fontweight='bold', color='#2ecc71')
 
     def update(frame):
         # Update Heads
-        current_pos = data[frame, :, :2] # [Batch, 2] -> (x, z)
+        current_pos = data[frame, :, :2]
         scatter.set_offsets(current_pos)
         
-        # Update Trails (Full history)
-        # To make it faster, we could limit history, but full history looks best for trajectory plots
+        # Update Trails
         for i, line in enumerate(trails):
-            hist_x = data[:frame+1, i, 0]
-            hist_z = data[:frame+1, i, 1]
-            line.set_data(hist_x, hist_z)
+            line.set_data(data[:frame+1, i, 0], data[:frame+1, i, 1])
             
-        # Physical Time Display
+        # Time Display
         current_time = frame * time_per_frame
         txt_time.set_text(f"TIME: {current_time:.3f}s")
-        return [scatter, txt_time, target_zone] + trails
+        
+        # Return ALL artists (including static ones) for correct blitting
+        return [scatter, txt_time, target_zone, target_cross] + trails
 
     ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=30, blit=True)
     
@@ -432,138 +427,149 @@ def generate_chaos_plot(history, scales):
 # ==============================================================================
 def generate_gif(data, env):
     print(f"\n--> Rendering Professional GIF ({len(data['r'])} frames)...")
-    r_states = data['r']
-    w_poses = data['w']
+    r_states, w_poses = data['r'], data['w']
     times = data['t']
-    flag_force = data['p_force']
-    flag_torque = data['p_torque']
+    flag_force, flag_torque = data['p_force'], data['p_torque']
     
+    # Scales for visualization
     th_viz_scale = np.cbrt(data['meta']['th_scale'])
     ab_viz_scale = np.cbrt(data['meta']['ab_scale'])
     
+    # Pre-calculate Wing Coords (Local Frame)
     wing_rel_history = []
     for i in range(len(r_states)):
         r, w = r_states[i], w_poses[i]
-        dx_global = w[0] - r[0]
-        dz_global = w[1] - r[1]
+        dx, dz = w[0] - r[0], w[1] - r[1]
         c, s = np.cos(-r[2]), np.sin(-r[2])
-        x_local = dx_global * c - dz_global * s
-        z_local = dx_global * s + dz_global * c
-        wing_rel_history.append([x_local, z_local])
+        wing_rel_history.append([dx * c - dz * s, dx * s + dz * c])
     wing_rel_history = np.array(wing_rel_history)
 
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=Config.DPI)
+    # --- 1. SETUP: Identical Geometry to Swarm ---
+    dark_bg = '#1a1a1a'
+    fig, ax = plt.subplots(figsize=(10, 10), dpi=Config.DPI, facecolor=dark_bg)
+    fig.subplots_adjust(left=0.08, right=0.95, bottom=0.08, top=0.90) # MATCHED EXACTLY
     ax.set_aspect('equal')
-    ax.set_facecolor('white')
-    ax.grid(True, color='#e0e0e0', linestyle='-', linewidth=1.0)
+    ax.set_facecolor(dark_bg)
+    ax.grid(True, color='#333333', linestyle='-', linewidth=0.5)
 
-    # --- 1.Target Zone ---
-    target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.1, 
-                                 edgecolor='#27ae60', linestyle='--', linewidth=1.2, 
-                                 zorder=1, label='Target Zone (1cm)')
+    for spine in ax.spines.values(): spine.set_color('#555555')
+    ax.tick_params(colors='#888888', labelsize=8)
+
+    # --- 2. OBJECTS ---
+    # Target
+    target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.08, 
+                                 edgecolor='#27ae60', linestyle='--', linewidth=1.2, zorder=1, label='Target')
     ax.add_patch(target_zone)
     
-    # --- 2.Trajectory Lines ---
-    # CoM: Neutral Gray, Dashed
-    traj_line, = ax.plot([], [], color='#7f8c8d', linestyle='--', linewidth=1.0, alpha=0.8, label='CoM Trajectory')
-    
-    # Wingtip: Deep Purple (High contrast), Solid
-    wing_traj_line, = ax.plot([], [], color='#8e44ad', linestyle='-', linewidth=1.0, alpha=0.9, label='Wingtip Trace')
-    
-    # --- 3.Body Patches (Added Outlines) ---
-    # Edgecolor='#202020',linewidth=0.8
+    # Trails
+    traj_line, = ax.plot([], [], color='#555555', linestyle='--', linewidth=0.8, alpha=0.7, label='CoM Path')
+    wing_traj_line, = ax.plot([], [], color='#bb86fc', linestyle='-', linewidth=1.0, alpha=0.9, label='Wing Trace')
+
+    # Body (Grayscale for dark theme)
     patch_thorax = patches.Ellipse((0,0), width=0.012*th_viz_scale, height=0.006*th_viz_scale, 
-                                   facecolor='#404040', edgecolor='#202020', linewidth=0.8, zorder=10)
-    
+                                   facecolor='#555555', edgecolor='#888888', linewidth=0.6, zorder=10)
     patch_head = patches.Circle((0,0), radius=0.0025*th_viz_scale, 
-                                facecolor='#b0b0b0', edgecolor='#202020', linewidth=0.8, zorder=10)
-    
+                                facecolor='#aaaaaa', edgecolor='#888888', linewidth=0.6, zorder=10)
     patch_abd = patches.Ellipse((0,0), width=0.018*ab_viz_scale, height=0.008*ab_viz_scale, 
-                                facecolor='#707070', edgecolor='#202020', linewidth=0.8, alpha=0.9, zorder=9)
-    
+                                facecolor='#3d3d3d', edgecolor='#888888', linewidth=0.6, alpha=0.9, zorder=9)
     ax.add_patch(patch_thorax); ax.add_patch(patch_head); ax.add_patch(patch_abd)
     
+    # Wings
     wing_lines = []
     shadow_alphas = np.linspace(0.02, 0.3, Config.N_SHADOW_WINGS)
     all_alphas = np.concatenate([shadow_alphas, [1.0]])
     for a in all_alphas:
-        lw = 1.5 if a == 1.0 else 1.2
-        col = 'k' if a == 1.0 else '#202020'
-        wl, = ax.plot([], [], col, linestyle='-', linewidth=lw, alpha=a, zorder=11)
+        # Lighter wings for visibility on dark bg
+        col = '#eeeeee' if a == 1.0 else '#666666'
+        wl, = ax.plot([], [], col, linestyle='-', linewidth=(1.5 if a==1.0 else 1.2), alpha=a, zorder=11)
         wing_lines.append(wl)
         
-    arrow_force = patches.FancyArrow(0, 0, 0, 0, width=0.005, color='#c0392b', zorder=20, alpha=0.0)
+    # Indicators
+    arrow_force = patches.FancyArrow(0, 0, 0, 0, width=0.005, color='#cf6679', zorder=20, alpha=0.0) # Muted red
     ax.add_patch(arrow_force)
-    text_torque = ax.text(0, 0, '', fontsize=30, color='#d35400', ha='center', va='center', fontweight='bold', zorder=20, alpha=0.0)
-    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, fontweight='bold', family='monospace', color='k')
-    txt_info = ax.text(0.05, 0.90, '', transform=ax.transAxes, fontsize=10, family='monospace', color='#333333')
+    text_torque = ax.text(0, 0, '', fontsize=30, color='#ffb74d', ha='center', va='center', fontweight='bold', zorder=20, alpha=0.0) # Muted orange
     
-    window_size = 0.3
+    # Text Telemetry
+    txt_time = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, fontweight='bold', family='monospace', color='#cccccc')
+    txt_info = ax.text(0.05, 0.90, '', transform=ax.transAxes, fontsize=10, family='monospace', color='#888888')
+    
+    # Helper for wing transform
     def get_wing_coords(r_pos, w_pose):
         wx, wz, wang = w_pose
         wing_len = env.phys.fluid.WING_LEN
         N_pts = 20
         x_local = np.linspace(wing_len/2, -wing_len/2, N_pts)
         c_w, s_w = np.cos(wang), np.sin(wang)
-        wing_x = wx + x_local * c_w
-        wing_z = wz + x_local * s_w
-        return wing_x, wing_z
+        return wx + x_local * c_w, wz + x_local * s_w
 
-    leg = ax.legend(loc='upper right', fontsize=9, framealpha=0.9, 
-                    edgecolor='#cccccc', shadow=False)
+    # Legend (Visible on Dark BG)
+    leg = ax.legend(loc='upper right', fontsize=8, framealpha=0.1, labelcolor='#aaaaaa', edgecolor='#444444', shadow=False)
     leg.set_zorder(100)
 
+    window_size = 0.2
+
     def update(frame):
-        idx = frame
-        if idx >= len(r_states): return []
-        
-        curr_r = r_states[idx]
+        if frame >= len(r_states): return []
+        curr_r = r_states[frame]
         rx, rz, r_th, r_phi = curr_r[0], curr_r[1], curr_r[2], curr_r[3]
         
+        # Camera
         ax.set_xlim(0.0 - window_size, 0.0 + window_size)
         ax.set_ylim(0.0 - window_size, 0.0 + window_size)
         
+        # Update Body
         patch_thorax.set_center((rx, rz)); patch_thorax.set_angle(np.degrees(r_th))
-        d1 = env.phys.robot.d1; patch_head.set_center((rx + d1 * np.cos(r_th), rz + d1 * np.sin(r_th)))
-        d2 = env.phys.robot.d2; abd_ang = r_th + r_phi
+        d1, d2 = env.phys.robot.d1, env.phys.robot.d2
+        patch_head.set_center((rx + d1 * np.cos(r_th), rz + d1 * np.sin(r_th)))
+        abd_ang = r_th + r_phi
         patch_abd.set_center((rx - d1 * np.cos(r_th) - d2 * np.cos(abd_ang), rz - d1 * np.sin(r_th) - d2 * np.sin(abd_ang)))
         patch_abd.set_angle(np.degrees(abd_ang))
         
-        num_total_wings = len(wing_lines)
-        for k in range(num_total_wings):
-            offset = (num_total_wings - 1) - k
-            hist_idx = max(0, idx - offset)
-            w_x, w_z = get_wing_coords(r_states[hist_idx], w_poses[hist_idx])
-            wing_lines[k].set_data(w_x, w_z)
-
-        hist_len = 120; start_t = max(0, idx - hist_len)
-        traj_line.set_data([r[0] for r in r_states[start_t:idx]], [r[1] for r in r_states[start_t:idx]])
-
-        start_w = max(0, idx - Config.TRACE_HIST_LEN); rel_chunk = wing_rel_history[start_w:idx]
+        # Update Wings
+        num_wings = len(wing_lines)
+        for k in range(num_wings):
+            hist_idx = max(0, frame - (num_wings - 1 - k))
+            wx, wz = get_wing_coords(r_states[hist_idx], w_poses[hist_idx])
+            wing_lines[k].set_data(wx, wz)
+            
+        # Update Trails
+        hist_len = 120
+        start_t = max(0, frame - hist_len)
+        traj_line.set_data([r[0] for r in r_states[start_t:frame]], [r[1] for r in r_states[start_t:frame]])
+        
+        start_w = max(0, frame - Config.TRACE_HIST_LEN)
+        rel_chunk = wing_rel_history[start_w:frame]
         if len(rel_chunk) > 0:
             c, s = np.cos(r_th), np.sin(r_th)
             wing_traj_line.set_data(rel_chunk[:,0]*c - rel_chunk[:,1]*s + rx, rel_chunk[:,0]*s + rel_chunk[:,1]*c + rz)
-        else: wing_traj_line.set_data([], [])
-
-        is_force = flag_force[idx]; is_torque = flag_torque[idx]
+        else:
+            wing_traj_line.set_data([], [])
+            
+        # Perturbation Flags
+        is_force, is_torque = flag_force[frame], flag_torque[frame]
         if is_force:
             arrow_force.set_alpha(1.0)
-            fx, fz = Config.PERTURB_FORCE; mag = np.sqrt(fx**2 + fz**2) + 1e-6
+            fx, fz = Config.PERTURB_FORCE
+            mag = np.sqrt(fx**2 + fz**2) + 1e-6
             arrow_force.set_data(x=rx - (fx/mag)*0.045, y=rz - (fz/mag)*0.045, dx=(fx/mag)*0.03, dy=(fz/mag)*0.03)
         else: arrow_force.set_alpha(0.0)
         
         if is_torque:
-            text_torque.set_alpha(1.0); text_torque.set_position((rx, rz + 0.02))
+            text_torque.set_alpha(1.0)
+            text_torque.set_position((rx, rz + 0.02))
             text_torque.set_text('⟲' if Config.PERTURB_TORQUE > 0 else '⟳')
         else: text_torque.set_alpha(0.0)
         
         if is_force or is_torque:
-            txt_info.set_text("STATUS: !! GUST !!"); txt_info.set_color('#c0392b')
+            txt_info.set_text("STATUS: !! GUST !!"); txt_info.set_color('#cf6679')
         else:
-            txt_info.set_text("STATUS: STABLE HOVER"); txt_info.set_color('#27ae60')
+            txt_info.set_text("STATUS: STABLE HOVER"); txt_info.set_color('#2ecc71')
             
-        txt_time.set_text(f"T: {times[idx]:.4f}s")
-        return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, arrow_force, text_torque, txt_time, txt_info, leg, target_zone] + wing_lines
+        txt_time.set_text(f"T: {times[frame]:.4f}s")
+        
+        # Return all for blit
+        return [patch_thorax, patch_head, patch_abd, traj_line, wing_traj_line, 
+                arrow_force, text_torque, txt_time, txt_info, leg, target_zone] + wing_lines
 
     ani = animation.FuncAnimation(fig, update, frames=len(r_states), interval=800/Config.FPS, blit=True)
     out_name = "hornet_flight_inference.gif"
