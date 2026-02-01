@@ -456,32 +456,52 @@ def generate_gif(data, env):
     ax.tick_params(colors='#888888', labelsize=8)
 
     # --- 2. OBJECTS ---
-    # Target
+    # Target 
     target_zone = patches.Circle((0, 0), radius=0.01, facecolor='#2ecc71', alpha=0.08, 
                                  edgecolor='#27ae60', linestyle='--', linewidth=1.2, zorder=1, label='Target')
     ax.add_patch(target_zone)
     
-    # Trails
-    traj_line, = ax.plot([], [], color='#555555', linestyle='--', linewidth=0.8, alpha=0.7, label='CoM Path')
-    wing_traj_line, = ax.plot([], [], color='#bb86fc', linestyle='-', linewidth=1.0, alpha=0.9, label='Wing Trace')
+    # Trails (Adjusted alphas for better visibility)
+    traj_line, = ax.plot([], [], color='#777777', linestyle='--', linewidth=1.0, alpha=0.6, label='CoM Path')
+    wing_traj_line, = ax.plot([], [], color='#bb86fc', linestyle='-', linewidth=1.2, alpha=1.0, label='Wing Trace')
 
-    # Body (Grayscale for dark theme)
+    # --- BODY VISUALIZATION ---
+    # "Metallic Silver" with High-Contrast Light Edges
+    # Thorax: Metallic Mid-Gray fill, Bright Edge
     patch_thorax = patches.Ellipse((0,0), width=0.012*th_viz_scale, height=0.006*th_viz_scale, 
-                                   facecolor='#555555', edgecolor='#888888', linewidth=0.6, zorder=10)
+                                   facecolor='#666666',      # Lighter than background
+                                   edgecolor='#d1d1d1',      # Very light gray edge (Pop!)
+                                   linewidth=1.0,            # Slightly thicker line
+                                   zorder=10)
+    
+    # Head: Light Silver fill
     patch_head = patches.Circle((0,0), radius=0.0025*th_viz_scale, 
-                                facecolor='#aaaaaa', edgecolor='#888888', linewidth=0.6, zorder=10)
+                                facecolor='#aaaaaa',         # Bright silver
+                                edgecolor='#d1d1d1',         # Matching edge
+                                linewidth=1.0, 
+                                zorder=10)
+    
+    # Abdomen: Darker Steel Gray (to show segmentation contrast)
     patch_abd = patches.Ellipse((0,0), width=0.018*ab_viz_scale, height=0.008*ab_viz_scale, 
-                                facecolor='#3d3d3d', edgecolor='#888888', linewidth=0.6, alpha=0.9, zorder=9)
+                                facecolor='#4a4a4a',         # Visible steel gray (was #3d3d3d)
+                                edgecolor='#999999',         # Medium-light edge
+                                linewidth=1.0, 
+                                alpha=1.0,                   # Removed alpha to prevent background bleed-through
+                                zorder=9)
+    
     ax.add_patch(patch_thorax); ax.add_patch(patch_head); ax.add_patch(patch_abd)
     
-    # Wings
+    # --- WINGS ---
     wing_lines = []
-    shadow_alphas = np.linspace(0.02, 0.3, Config.N_SHADOW_WINGS)
+    shadow_alphas = np.linspace(0.05, 0.4, Config.N_SHADOW_WINGS) # Slightly higher opacity
     all_alphas = np.concatenate([shadow_alphas, [1.0]])
+    
     for a in all_alphas:
-        # Lighter wings for visibility on dark bg
-        col = '#eeeeee' if a == 1.0 else '#666666'
-        wl, = ax.plot([], [], col, linestyle='-', linewidth=(1.5 if a==1.0 else 1.2), alpha=a, zorder=11)
+        # If it's the main wing (a=1.0), use White/Silver.
+        # If it's a shadow, also use White but let the alpha do the work.
+        col = '#ffffff' # Pure white looks best against #1a1a1a
+        lw = 1.5 if a == 1.0 else 1.0
+        wl, = ax.plot([], [], col, linestyle='-', linewidth=lw, alpha=a, zorder=11)
         wing_lines.append(wl)
         
     # Indicators
