@@ -91,14 +91,14 @@ class InferenceFlyEnv:
             k1_c, k2_c = jax.random.split(key)
             k_theta, k_phi = jax.random.split(k2_c)
             
-            # Position: Wide window (+/- 15cm)
+            # Position: Wide window
             q_pos = jax.random.uniform(k1_c, (batch_size, 2), minval=-0.25, maxval=0.25)
             
-            # Pitch: Random range (-1.5 to 1.5) + Offset 1.0 -> Range (-0.5 to 2.5)
-            theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-1.5, maxval=1.5)
+            # Pitch: Random range
+            theta_chaos = jax.random.uniform(k_theta, (batch_size, 1), minval=-2.5, maxval=2.5)
             theta_chaos = theta_chaos + 1.0
             
-            # Abdomen: Random range (-0.3 to 0.3) + Offset 0.2
+            # Abdomen: Random range
             phi_chaos = jax.random.uniform(k_phi, (batch_size, 1), minval=-0.3, maxval=0.3)
             phi_chaos = phi_chaos + 0.2
             
@@ -344,6 +344,8 @@ def generate_chaos_plot(history, scales):
     num_steps, num_agents, _ = data.shape
     time_per_frame = Config.DT * Config.VIZ_STEP_SKIP
     m_min, m_max = np.min(scales), np.max(scales)
+    init_pitch = data[0, :, 2]
+    p_min, p_max = np.min(init_pitch), np.max(init_pitch)
     
     # Magnified sizes for visual clarity (Cubic scaling)
     base_size = 45
@@ -371,8 +373,8 @@ def generate_chaos_plot(history, scales):
     ax.set_xlabel("X Position (m)", color='#aaaaaa', fontsize=10, fontweight='bold')
     ax.set_ylabel("Z Position (m)", color='#aaaaaa', fontsize=10, fontweight='bold')
     ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\n"
-                 f"Mass Variability: [{m_min:.2f}M - {m_max:.2f}M]", 
-                 color='white', fontsize=12, pad=10, fontweight='bold')
+                 f"Mass: [{m_min:.2f}-{m_max:.2f}M] | Initial Pitch: [{p_min:.2f}-{p_max:.2f} rad]", 
+                 color='white', fontsize=11, pad=12, fontweight='bold')
 
     # --- 3. OBJECTS ---
     # Target Zone (Circle)
