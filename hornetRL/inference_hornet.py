@@ -343,9 +343,6 @@ def generate_chaos_plot(history, scales):
     data = np.stack(history, axis=0) 
     num_steps, num_agents, _ = data.shape
     time_per_frame = Config.DT * Config.VIZ_STEP_SKIP
-    m_min, m_max = np.min(scales), np.max(scales)
-    init_pitch = data[0, :, 2]
-    p_min, p_max = np.min(init_pitch), np.max(init_pitch)
     
     # Magnified sizes for visual clarity (Cubic scaling)
     base_size = 45
@@ -368,13 +365,6 @@ def generate_chaos_plot(history, scales):
     limit = 0.3
     ax.set_xlim(-limit, limit)
     ax.set_ylim(-limit, limit)
-    
-    # Labels & Title
-    ax.set_xlabel("X Position (m)", color='#aaaaaa', fontsize=10, fontweight='bold')
-    ax.set_ylabel("Z Position (m)", color='#aaaaaa', fontsize=10, fontweight='bold')
-    ax.set_title(f"Swarm Recovery Analysis (N={num_agents})\n"
-                 f"Mass: [{m_min:.2f}-{m_max:.2f}M] | Initial Pitch: [{p_min:.2f}-{p_max:.2f} rad]", 
-                 color='white', fontsize=11, pad=12, fontweight='bold')
 
     # --- 3. OBJECTS ---
     # Target Zone (Circle)
