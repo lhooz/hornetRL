@@ -518,7 +518,7 @@ def generate_gif(data, env):
     leg = ax.legend(loc='upper right', fontsize=8, framealpha=0.1, labelcolor='#aaaaaa', edgecolor='#444444', shadow=False)
     leg.set_zorder(100)
 
-    window_size = 0.2
+    window_size = 0.25
 
     def update(frame):
         if frame >= len(r_states): return []
