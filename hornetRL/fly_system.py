@@ -136,10 +136,10 @@ class FlyRobotPhysics:
         I_total_ph = I2 + m2*(l2**2)
         I_coup = I2 + m2*(l2**2 + l1*l2*c_ph)
         
-        row0 = jnp.array([M_00, 0.0,  M_02, M_03])
-        row1 = jnp.array([0.0,  M_11, M_12, M_13])
-        row2 = jnp.array([M_02, M_12, I_total_th, I_coup])
-        row3 = jnp.array([M_03, M_13, I_coup,       I_total_ph])
+        row0 = jnp.stack([M_00, jnp.zeros(()), M_02, M_03])
+        row1 = jnp.stack([jnp.zeros(()), M_11, M_12, M_13])
+        row2 = jnp.stack([M_02, M_12, I_total_th, I_coup])
+        row3 = jnp.stack([M_03, M_13, I_coup,       I_total_ph])
         
         return jnp.stack([row0, row1, row2, row3])
 
@@ -192,7 +192,7 @@ class FlyRobotPhysics:
         
         # Wing Pitch Angle (Global)
         wing_ang = global_st_ang + local_pitch + 1.5707
-        wing_pose = jnp.array([slice_x, slice_z, wing_ang])
+        wing_pose = jnp.stack([slice_x, slice_z, wing_ang])
         
         # --- 3. Calculate Wing Velocity (Global) ---
         # Flapping velocity components
@@ -212,7 +212,7 @@ class FlyRobotPhysics:
         # Total Rotational Velocity (Body + Pitching)
         w_total = w_theta + d_pitch
         
-        wing_vel = jnp.array([v_total_x, v_total_z, w_total], dtype=jnp.float32)
+        wing_vel = jnp.stack([v_total_x, v_total_z, w_total]).astype(jnp.float32)
         
         return wing_pose, wing_vel
 
@@ -352,7 +352,7 @@ class FlappingFlySystem:
         body_pos_z = q[1]
         hinge_marker_x = body_pos_x + hinge_glob_x
         hinge_marker_z = body_pos_z + hinge_glob_z
-        hinge_marker = jnp.array([hinge_marker_x, hinge_marker_z])
+        hinge_marker = jnp.stack([hinge_marker_x, hinge_marker_z])
         
         # B. Bias Offset (Translated along Stroke Plane)
         # The bias shifts the center of oscillation relative to the hinge.
@@ -377,7 +377,7 @@ class FlappingFlySystem:
         pose_centered_x = wing_pose_global[0] - (body_pos_x + offset_vec_x)
         pose_centered_z = wing_pose_global[1] - (body_pos_z + offset_vec_z)
         
-        wing_pose_centered = jnp.array([pose_centered_x, pose_centered_z, wing_pose_global[2]])
+        wing_pose_centered = jnp.stack([pose_centered_x, pose_centered_z, wing_pose_global[2]])
 
         # ==================================================================
         # 5. Fluid Surrogate Step
@@ -408,11 +408,11 @@ class FlappingFlySystem:
         tau_wing = jnp.sum(node_torques)
         
         # --- 7. Generalized Forces ---
-        u_aero = jnp.array([f_wing_si[0], f_wing_si[1], tau_wing, 0.0]) 
-        
+        u_aero = jnp.stack([f_wing_si[0], f_wing_si[1], tau_wing, jnp.zeros(())])
+
         # --- 8. Total Actuation (Aero + CPG Abdomen Torque) ---
         # Internal torque applies only to the relative coordinate (phi)
-        u_internal = jnp.array([0.0, 0.0, 0.0, abd_torque]) 
+        u_internal = jnp.stack([jnp.zeros(()), jnp.zeros(()), jnp.zeros(()), jnp.asarray(abd_torque).ravel()[0]])
         
         u_total = u_aero + u_internal
         
