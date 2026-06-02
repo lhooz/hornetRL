@@ -2,8 +2,6 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 from typing import NamedTuple, Tuple
-# We need jacfwd to automatically calculate the "slope" of the wing kinematics
-from jax import jacfwd
 
 # =============================================================================
 # 0. Biological Constraints
@@ -187,69 +185,80 @@ def step_oscillator(state: OscillatorState, modulations, dt) -> OscillatorState:
 def get_wing_kinematics(state: OscillatorState, modulations) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.float32]:
     """
     Constructs the instantaneous wing state (Angles and Velocities).
-    
-    Uses Automatic Differentiation (Jacobian) to calculate velocities, ensuring
-    that changes in shaping parameters (e.g., changing dev_phase) correctly 
-    contribute to the total wing velocity.
+
+    Computes wing velocities using closed-form analytical partial derivatives
+    instead of jacfwd. This avoids mixed forward-over-reverse AD (jacfwd inside
+    value_and_grad) which causes shape leakage in JAX 0.10: the 3-output
+    Jacobian dimension propagates into downstream arrays, causing broadcast
+    failures such as (3,2,20) vs (20,2) in the fluid surrogate.
     """
-    
+
     # --- 1. Unpack Modulations ---
     d_freq, d_amp, bias_target, p_target, dev_amp_target, abd_torque, _, _, dev_phase_target = modulations
-    
+
     # --- 2. Calculate Safe Integration Rates ---
-    # Applies sigmoid masking to smoothly clamp rates near the min/max limits.
     f_low, f_high = BioConfig.FREQ_MIN, BioConfig.FREQ_MAX
-    freq_mask_low  = jax.nn.sigmoid(3.0 * (state.freq - (f_low + 4.0))) 
+    freq_mask_low  = jax.nn.sigmoid(3.0 * (state.freq - (f_low + 4.0)))
     freq_mask_high = jax.nn.sigmoid(3.0 * ((f_high - 4.0) - state.freq))
-    d_freq_safe = d_freq * freq_mask_low * freq_mask_high
+    d_freq_safe = d_freq * freq_mask_low * freq_mask_high  # noqa: F841
 
     a_low, a_high = BioConfig.AMP_MIN, BioConfig.AMP_MAX
-    amp_mask_low  = jax.nn.sigmoid(2000.0 * (state.amp - (a_low + 0.0005))) 
+    amp_mask_low  = jax.nn.sigmoid(2000.0 * (state.amp - (a_low + 0.0005)))
     amp_mask_high = jax.nn.sigmoid(2000.0 * ((a_high - 0.0005) - state.amp))
     d_amp_safe = d_amp * amp_mask_low * amp_mask_high
-    
-    # --- 3. Calculate LPF State Derivatives ---
-    # v = (Target - Current) / Tau
+
+    # --- 3. LPF State Derivatives ---
     d_bias_dt      = (bias_target      - state.bias)      / BioConfig.TAU_KINEMATICS
     d_dev_amp_dt   = (dev_amp_target   - state.dev_amp)   / BioConfig.TAU_KINEMATICS
     d_dev_phase_dt = (dev_phase_target - state.dev_phase) / BioConfig.TAU_KINEMATICS
     d_pitch_off_dt = (p_target         - state.pitch_off) / BioConfig.TAU_KINEMATICS
+    d_phi_dt       = 2.0 * jnp.pi * state.freq
+    d_amp_dt       = d_amp_safe
 
-    d_phi_dt = 2.0 * jnp.pi * state.freq 
-    d_amp_dt = d_amp_safe 
-    
-    # --- 4. Define Kinematic Mapping Function ---
-    def kinematic_map(phi, amp, bias, dev_amp, dev_phase, pitch_off):
-        # 1. Stroke Angle: Sinusoidal oscillation with bias
-        stroke_val = (amp * jnp.sin(phi)) + bias
-        
-        # 2. Pitch Angle: Controlled by AoA limits and pitch offset
-        stroke_vel_sign = jnp.cos(phi + pitch_off)
-        switch = 0.5 * (1.0 + jnp.tanh(3.0 * stroke_vel_sign))
-        current_mid_aoa = state.aoa_up + (state.aoa_dn - state.aoa_up) * switch
-        pitch_val = -current_mid_aoa * jnp.cos(phi + pitch_off)
-        
-        # 3. Deviation Angle: Figure-8 pattern with phase shift
-        dev_val = -dev_amp * jnp.sin(2.0 * phi + dev_phase)
-        
-        return jnp.array([stroke_val, dev_val, pitch_val])
+    # --- 4. Kinematic Angles (same as original kinematic_map) ---
+    phi        = state.phase
+    amp        = state.amp
+    bias       = state.bias
+    dev_amp    = state.dev_amp
+    dev_phase  = state.dev_phase
+    pitch_off  = state.pitch_off
 
-    # --- 5. Calculate Angles ---
-    wing_angles = kinematic_map(state.phase, state.amp, state.bias, state.dev_amp, state.dev_phase, state.pitch_off)
-    
-    # --- 6. Calculate Velocities via Jacobian ---
-    # We differentiate with respect to all time-varying parameters
-    J = jacfwd(kinematic_map, argnums=(0, 1, 2, 3, 4, 5))(
-        state.phase, state.amp, state.bias, state.dev_amp, state.dev_phase, state.pitch_off
-    )
-    dPos_dPhi, dPos_dAmp, dPos_dBias, dPos_dDev, dPos_dDevPhase, dPos_dPitchOff = J
-    
-    # Total Rate = Partial_Derivatives * Time_Derivatives
-    wing_rates = (dPos_dPhi * d_phi_dt) + \
-                 (dPos_dAmp * d_amp_dt) + \
-                 (dPos_dBias * d_bias_dt) + \
-                 (dPos_dDev * d_dev_amp_dt) + \
-                 (dPos_dDevPhase * d_dev_phase_dt) + \
-                 (dPos_dPitchOff * d_pitch_off_dt)
+    stroke_val = amp * jnp.sin(phi) + bias
+
+    phi_off    = phi + pitch_off                          # phi + pitch_off
+    svs        = jnp.cos(phi_off)                         # stroke_vel_sign
+    switch     = 0.5 * (1.0 + jnp.tanh(3.0 * svs))
+    mid_aoa    = state.aoa_up + (state.aoa_dn - state.aoa_up) * switch
+    pitch_val  = -mid_aoa * jnp.cos(phi_off)
+
+    phi2       = 2.0 * phi + dev_phase
+    dev_val    = -dev_amp * jnp.sin(phi2)
+
+    wing_angles = jnp.stack([stroke_val, dev_val, pitch_val])
+
+    # --- 5. Analytical Velocity: d(angles)/dt ---
+    # Stroke: d/dt [amp*sin(phi) + bias]
+    #       = amp*cos(phi)*dphi + sin(phi)*damp + dbias
+    d_stroke_dt = (amp * jnp.cos(phi)) * d_phi_dt \
+                + jnp.sin(phi) * d_amp_dt \
+                + d_bias_dt
+
+    # Deviation: d/dt [-dev_amp * sin(2*phi + dev_phase)]
+    #          = -dev_amp*cos(phi2)*2*dphi  -  sin(phi2)*d_dev_amp  -  dev_amp*cos(phi2)*d_dev_phase
+    d_dev_dt = (-dev_amp * jnp.cos(phi2) * 2.0) * d_phi_dt \
+             + (-jnp.sin(phi2)) * d_dev_amp_dt \
+             + (-dev_amp * jnp.cos(phi2)) * d_dev_phase_dt
+
+    # Pitch: d/dt [-mid_aoa * cos(phi + pitch_off)]
+    # Both phi and pitch_off enter through phi_off = phi + pitch_off, so
+    #   d_pitch/d_phi = d_pitch/d_pitch_off  (same expression)
+    sech2        = 1.0 - jnp.tanh(3.0 * svs) ** 2
+    d_switch_darg = -1.5 * jnp.sin(phi_off) * sech2           # d(switch)/d(phi_off)
+    d_mid_aoa_darg = (state.aoa_dn - state.aoa_up) * d_switch_darg
+    d_pitch_darg   = -d_mid_aoa_darg * jnp.cos(phi_off) \
+                   + mid_aoa * jnp.sin(phi_off)               # d(pitch)/d(phi_off)
+    d_pitch_dt = d_pitch_darg * (d_phi_dt + d_pitch_off_dt)
+
+    wing_rates = jnp.stack([d_stroke_dt, d_dev_dt, d_pitch_dt])
 
     return wing_angles, wing_rates, abd_torque, state.bias
