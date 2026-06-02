@@ -208,39 +208,45 @@ class JaxSurrogateEngine:
         # --- 1. Frame Transformation (Global -> Horizontal Local) ---
         rot_angle = -stroke_plane_angle
         c_r, s_r = jnp.cos(rot_angle), jnp.sin(rot_angle)
-        RM = jnp.array([[c_r, -s_r], [s_r, c_r]])
-        
+        # NOTE: jnp.array([[c_r, -s_r], [s_r, c_r]]) is unsafe in JAX 0.10 when
+        # c_r/s_r are traced under jacfwd inside value_and_grad — it can produce
+        # wrong shapes. Use explicit element-wise rotation instead.
+
         # Calculate linear stroke position in the local frame.
         # pivot_vec_global represents Vector(Stroke Center -> Wing Hinge).
-        pivot_vec_global = wing_pose[:2]
-        pivot_vec_local = jnp.dot(RM, pivot_vec_global)
-        
-        bx_loc = pivot_vec_local[0] 
-        bz_loc = pivot_vec_local[1] 
-        
+        px, pz = wing_pose[0], wing_pose[1]
+        bx_loc =  c_r * px + s_r * pz   #  rot(rot_angle) * [px, pz]
+        bz_loc = -s_r * px + c_r * pz
+
         # Transform previous state velocity to local frame (required for Accel calc)
-        s_vel_prev_loc = jnp.dot(fluid_state.s_vel, RM.T)
-        
+        # s_vel: (N, 2);  rotate each row by rot_angle
+        s_vel_prev_loc = jnp.stack([
+             c_r * fluid_state.s_vel[:, 0] + s_r * fluid_state.s_vel[:, 1],
+            -s_r * fluid_state.s_vel[:, 0] + c_r * fluid_state.s_vel[:, 1],
+        ], axis=1)
+
         # Transform kinematics to local frame
         bang_loc = wing_pose[2] + rot_angle
-        v_lin_loc = jnp.dot(wing_vel_surr[:2], RM.T)
-        vbx_loc, vbz_loc, vang_loc = v_lin_loc[0], v_lin_loc[1], wing_vel_surr[2]
+        vwx, vwz = wing_vel_surr[0], wing_vel_surr[1]
+        vbx_loc =  c_r * vwx + s_r * vwz
+        vbz_loc = -s_r * vwx + c_r * vwz
+        vang_loc = wing_vel_surr[2]
 
         # --- 2. Compute Rigid State (Local Frame) ---
         c, s = jnp.cos(bang_loc), jnp.sin(bang_loc)
-        
+
         # A. Rigid Positions: Place wing in grid using local hinge coordinates
         gx = bx_loc + self.x_local_ref * c
         gy = bz_loc + self.x_local_ref * s
-        current_pos_loc = jnp.stack([gx, gy], axis=1) 
-        
+        current_pos_loc = jnp.stack([gx, gy], axis=1)
+
         # B. Rigid Velocities: v = v_trans + omega x r
         rx = gx - bx_loc
         ry = gy - bz_loc
-        
+
         vgx = vbx_loc - vang_loc * ry
         vgy = vbz_loc + vang_loc * rx
-        current_vel_loc = jnp.stack([vgx, vgy], axis=1) 
+        current_vel_loc = jnp.stack([vgx, vgy], axis=1)
 
         state_loc = SurrogateState(current_pos_loc, current_vel_loc, s_vel_prev_loc, jnp.zeros(2))
 
@@ -249,22 +255,27 @@ class JaxSurrogateEngine:
         aero_forces_loc = self.predict_aero_forces(params, state_loc) * 5.0
 
         # --- 4. Frame Transformation (Local -> Global) ---
-        # Transform positions and velocities back to global
-        final_pos_glob = jnp.dot(current_pos_loc, RM)
-        final_vel_glob = jnp.dot(current_vel_loc, RM)
-        
-        # Transform forces back to global
-        f_nodal_glob = jnp.dot(aero_forces_loc, RM)
-        f_wing_si = jnp.sum(f_nodal_glob, axis=0)
-        
+        # Rotate (N,2) arrays back by -rot_angle (i.e., +stroke_plane_angle)
+        # R^T = [[c_r, s_r], [-s_r, c_r]]  (transpose = inverse for rotation)
+        def rot_T(arr2d):
+            return jnp.stack([
+                c_r * arr2d[:, 0] - s_r * arr2d[:, 1],
+                s_r * arr2d[:, 0] + c_r * arr2d[:, 1],
+            ], axis=1)
+
+        final_pos_glob  = rot_T(current_pos_loc)
+        final_vel_glob  = rot_T(current_vel_loc)
+        f_nodal_glob    = rot_T(aero_forces_loc)
+        f_wing_si       = jnp.sum(f_nodal_glob, axis=0)
+
         # Pack next state
         next_state = SurrogateState(
             s_pos=final_pos_glob,
             s_vel=final_vel_glob,
             s_vel_prev=final_vel_glob,
-            marker_le=final_pos_glob[0] 
+            marker_le=final_pos_glob[0]
         )
-        
+
         return next_state, f_nodal_glob, f_wing_si
 
     def step(self, params, fluid_state: SurrogateState, _unused_struct, wing_pose_start, wing_vel_real, dt=None, stroke_plane_angle=0.0):
