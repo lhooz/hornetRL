@@ -215,21 +215,21 @@ class JaxSurrogateEngine:
         # Calculate linear stroke position in the local frame.
         # pivot_vec_global represents Vector(Stroke Center -> Wing Hinge).
         px, pz = wing_pose[0], wing_pose[1]
-        bx_loc =  c_r * px + s_r * pz   #  rot(rot_angle) * [px, pz]
-        bz_loc = -s_r * px + c_r * pz
+        bx_loc =  c_r * px - s_r * pz   #  rot(rot_angle) * [px, pz]
+        bz_loc =  s_r * px + c_r * pz
 
         # Transform previous state velocity to local frame (required for Accel calc)
         # s_vel: (N, 2);  rotate each row by rot_angle
         s_vel_prev_loc = jnp.stack([
-             c_r * fluid_state.s_vel[:, 0] + s_r * fluid_state.s_vel[:, 1],
-            -s_r * fluid_state.s_vel[:, 0] + c_r * fluid_state.s_vel[:, 1],
+             c_r * fluid_state.s_vel[:, 0] - s_r * fluid_state.s_vel[:, 1],
+             s_r * fluid_state.s_vel[:, 0] + c_r * fluid_state.s_vel[:, 1],
         ], axis=1)
 
         # Transform kinematics to local frame
         bang_loc = wing_pose[2] + rot_angle
         vwx, vwz = wing_vel_surr[0], wing_vel_surr[1]
-        vbx_loc =  c_r * vwx + s_r * vwz
-        vbz_loc = -s_r * vwx + c_r * vwz
+        vbx_loc =  c_r * vwx - s_r * vwz
+        vbz_loc =  s_r * vwx + c_r * vwz
         vang_loc = wing_vel_surr[2]
 
         # --- 2. Compute Rigid State (Local Frame) ---
@@ -257,15 +257,15 @@ class JaxSurrogateEngine:
         # --- 4. Frame Transformation (Local -> Global) ---
         # Rotate (N,2) arrays back by -rot_angle (i.e., +stroke_plane_angle)
         # R^T = [[c_r, s_r], [-s_r, c_r]]  (transpose = inverse for rotation)
-        def rot_T(arr2d):
+        def rot_back(arr2d):
             return jnp.stack([
-                c_r * arr2d[:, 0] - s_r * arr2d[:, 1],
-                s_r * arr2d[:, 0] + c_r * arr2d[:, 1],
+                c_r * arr2d[:, 0] + s_r * arr2d[:, 1],
+               -s_r * arr2d[:, 0] + c_r * arr2d[:, 1],
             ], axis=1)
 
-        final_pos_glob  = rot_T(current_pos_loc)
-        final_vel_glob  = rot_T(current_vel_loc)
-        f_nodal_glob    = rot_T(aero_forces_loc)
+        final_pos_glob  = rot_back(current_pos_loc)
+        final_vel_glob  = rot_back(current_vel_loc)
+        f_nodal_glob    = rot_back(aero_forces_loc)
         f_wing_si       = jnp.sum(f_nodal_glob, axis=0)
 
         # Pack next state
