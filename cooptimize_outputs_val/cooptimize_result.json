@@ -1,0 +1,20 @@
+{
+  "nominal_val_cost": 0.5621825456619263,
+  "best_val_cost": 0.5556787848472595,
+  "val_cost_reduction_pct": 1.15687704373836,
+  "morph_final": {
+    "thorax_mass_scale": 1.0028700828552246,
+    "abd_mass_scale": 0.9970337152481079,
+    "thorax_offset_x": -2.9290327802300453e-05,
+    "k_hinge_scale": 0.9999628067016602
+  },
+  "outer_steps": 3,
+  "k_inner": 2,
+  "horizon": 16,
+  "batch": 8,
+  "w_pitch": 0.3,
+  "lambda_reg": 0.05,
+  "lr_morph": 0.01,
+  "lr_policy": 0.0005,
+  "wall_s": 63.865066051483154
+}

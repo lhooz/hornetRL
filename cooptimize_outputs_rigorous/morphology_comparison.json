@@ -1,0 +1,98 @@
+{
+  "nominal": {
+    "morph": {
+      "thorax_mass_scale": 1.0,
+      "abd_mass_scale": 1.0,
+      "thorax_offset_x": 0.0,
+      "k_hinge_scale": 1.0
+    },
+    "success_rate": 0.4583333333333333,
+    "ci95": [
+      0.36218682395415014,
+      0.5576862550029179
+    ],
+    "n": 96,
+    "median_recovery_cm": 3.5476841926574707,
+    "mean_recovery_cm": 8.936104774475098
+  },
+  "co-optimized": {
+    "morph": {
+      "thorax_mass_scale": 1.0336679220199585,
+      "abd_mass_scale": 0.9717681407928467,
+      "thorax_offset_x": -0.00032246962655335665,
+      "k_hinge_scale": 0.999484658241272
+    },
+    "success_rate": 0.0,
+    "ci95": [
+      0.0,
+      0.03847694748481595
+    ],
+    "n": 96,
+    "median_recovery_cm": 54.00740051269531,
+    "mean_recovery_cm": 54.951175689697266
+  },
+  "random_0": {
+    "morph": {
+      "thorax_mass_scale": 1.0195254015709299,
+      "abd_mass_scale": 1.0860757465489679,
+      "thorax_offset_x": 0.00041105350428657553,
+      "k_hinge_scale": 1.0269299097981381
+    },
+    "success_rate": 0.4375,
+    "ci95": [
+      0.34256663889153366,
+      0.5372429795440685
+    ],
+    "n": 96,
+    "median_recovery_cm": 4.522347450256348,
+    "mean_recovery_cm": 12.05709457397461
+  },
+  "random_1": {
+    "morph": {
+      "thorax_mass_scale": 0.9694619197355618,
+      "abd_mass_scale": 1.0583576452266625,
+      "thorax_offset_x": -0.00024965115494923,
+      "k_hinge_scale": 1.2350638004692478
+    },
+    "success_rate": 0.4791666666666667,
+    "ci95": [
+      0.3819724566925992,
+      0.577964082785935
+    ],
+    "n": 96,
+    "median_recovery_cm": 3.5185720920562744,
+    "mean_recovery_cm": 9.1830472946167
+  },
+  "random_2": {
+    "morph": {
+      "thorax_mass_scale": 1.1854651042004116,
+      "abd_mass_scale": 0.9533766075303111,
+      "thorax_offset_x": 0.0011669001523306583,
+      "k_hinge_scale": 1.0173369518517428
+    },
+    "success_rate": 0.34375,
+    "ci95": [
+      0.2564024884934557,
+      0.4431215575955494
+    ],
+    "n": 96,
+    "median_recovery_cm": 6.181005001068115,
+    "mean_recovery_cm": 12.88716983795166
+  },
+  "best_fixed_grid": {
+    "morph": {
+      "thorax_mass_scale": 1.0,
+      "abd_mass_scale": 1.0,
+      "thorax_offset_x": 0.0,
+      "k_hinge_scale": 0.8
+    },
+    "success_rate": 0.4375,
+    "ci95": [
+      0.2816508596944317,
+      0.6067469796877387
+    ],
+    "n": 32,
+    "median_recovery_cm": 3.5531973838806152,
+    "mean_recovery_cm": 9.927816390991211
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "n_trials": 320,
+  "n_seeds": 5,
+  "n_agents": 64,
+  "success_rate": 0.9,
+  "success_rate_ci95": [
+    0.8622375682825127,
+    0.9282723600281182
+  ],
+  "per_seed_success": [
+    0.84375,
+    0.9375,
+    0.90625,
+    0.84375,
+    0.96875
+  ],
+  "pos_error_cm_mean": 0.6914309695259564,
+  "pos_error_cm_ci95": [
+    0.6533113864526273,
+    0.7295505525992855
+  ],
+  "pos_error_cm_median": 0.6935224533081055,
+  "pitch_err_deg_median": 10.067187309265137,
+  "settle_s_median": 0.29051999999999956,
+  "criterion": {
+    "pos_box_m": 0.05,
+    "pitch_box_rad": 0.3,
+    "settle_window_s": 0.15,
+    "target_pitch_rad": 1.0
+  },
+  "wall_s": 605.9072833061218
+}
